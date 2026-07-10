@@ -21,3 +21,10 @@ npm test
 ## Status
 
 Implements the schemas and pure functions from the spec. Not yet wired to a real Signal Store, EventLog, or Knowledge Graph persistence layer — those are the next milestones once this is reviewed.
+
+## Design notes from review
+
+- `recalc()` takes both `currentSignalStore` (the full known state) and `signalStoreDelta` (what changed since the last pass), and merges them before computing confidence. Using the delta alone would zero out confidence during a quiet period with no fresh signals, even though the system's last-known state is still valid.
+- `SignalType` is `KnownSignalType | \`custom:${string}\`` rather than `KnownSignalType | string` — the latter silently widens the whole union to `string` and defeats type-checking.
+- `OutcomeRecorded` is a terminal state. A decision whose outcome has been logged is closed history and is never rewritten. If new signals change the recommendation afterward, a new `Decision` is created with `supersedesDecisionId` pointing back to the original, instead of transitioning it to `Revised`.
+- CI (`.github/workflows/decision-engine-ci.yml`) runs `npm ci`, `npm run typecheck`, and `npm test` on every PR touching this package.
