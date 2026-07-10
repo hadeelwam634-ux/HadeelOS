@@ -76,6 +76,33 @@ export function runSignalStoreRepositoryContractTests(
       await expect(repo.delete("sleep_quality")).resolves.not.toThrow();
     });
 
+    it("mutating the object passed to upsert() does not affect the stored signal", async () => {
+      const repo = makeRepo();
+      const original = makeEntry({ latestValue: 5 });
+      await repo.upsert(original);
+
+      original.latestValue = 999;
+      original.reliabilityScore = 0;
+
+      const stored = await repo.get("sleep_quality");
+      expect(stored?.latestValue).toBe(5);
+      expect(stored?.reliabilityScore).toBe(0.85);
+    });
+
+    it("mutating an object returned from get() or getAll() does not affect the stored signal", async () => {
+      const repo = makeRepo();
+      await repo.upsert(makeEntry({ latestValue: 5 }));
+
+      const fetched = await repo.get("sleep_quality");
+      if (fetched) fetched.latestValue = 111;
+
+      const all = await repo.getAll();
+      if (all.sleep_quality) all.sleep_quality.latestValue = 222;
+
+      const stillStored = await repo.get("sleep_quality");
+      expect(stillStored?.latestValue).toBe(5);
+    });
+
     it("supports custom: namespaced signal types alongside known ones", async () => {
       const repo = makeRepo();
       await repo.upsert(

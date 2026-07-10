@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { EventLogRepository } from "../../src/persistence/EventLogRepository";
+import {
+  DuplicateEventLogEntryError,
+  EventLogRepository,
+} from "../../src/persistence/EventLogRepository";
 import { EventLogEntry } from "../../src/types";
 
 function makeEntry(overrides: Partial<EventLogEntry> = {}): EventLogEntry {
@@ -102,6 +105,43 @@ export function runEventLogRepositoryContractTests(
       const history = await repo.findByDecisionId("d1");
       history.pop();
       expect(await repo.findByDecisionId("d1")).toHaveLength(1);
+    });
+
+    it("mutating the object passed to append() does not affect the stored entry", async () => {
+      const repo = makeRepo();
+      const original = makeEntry({ id: "e1", outcome: "pending" });
+      await repo.append(original);
+
+      original.outcome = "completed";
+      original.outcomeTimestamp = "2026-07-10T20:00:00Z";
+
+      const [stored] = await repo.getAll();
+      expect(stored.outcome).toBe("pending");
+      expect(stored.outcomeTimestamp).toBeNull();
+    });
+
+    it("mutating an object returned from getAll() does not affect the stored log", async () => {
+      const repo = makeRepo();
+      await repo.append(makeEntry({ id: "e1", outcome: "pending" }));
+
+      const all = await repo.getAll();
+      all[0].outcome = "skipped";
+
+      const [stillStored] = await repo.getAll();
+      expect(stillStored.outcome).toBe("pending");
+    });
+
+    it("rejects appending an entry whose id already exists", async () => {
+      const repo = makeRepo();
+      await repo.append(makeEntry({ id: "e1", outcome: "pending" }));
+
+      await expect(
+        repo.append(makeEntry({ id: "e1", outcome: "completed" }))
+      ).rejects.toThrow(DuplicateEventLogEntryError);
+
+      // and the original entry must be untouched by the rejected attempt
+      const [stored] = await repo.getAll();
+      expect(stored.outcome).toBe("pending");
     });
   });
 }
