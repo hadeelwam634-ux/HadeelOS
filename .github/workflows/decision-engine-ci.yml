@@ -1,0 +1,35 @@
+name: Decision Engine CI
+
+on:
+  pull_request:
+    paths:
+      - "decision-engine/**"
+      - ".github/workflows/decision-engine-ci.yml"
+  push:
+    branches: [main]
+    paths:
+      - "decision-engine/**"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: decision-engine
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: decision-engine/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Run tests
+        run: npm test
