@@ -18,9 +18,18 @@ npm run typecheck
 npm test
 ```
 
+## Persistence layer (PR #2)
+
+- `src/persistence/SignalStoreRepository.ts` / `EventLogRepository.ts` — storage-agnostic interfaces. Every method returns a `Promise`, and `EventLogRepository` has no update or delete method at all, so the append-only guarantee is enforced by the type signature, not just convention.
+- `src/persistence/InMemorySignalStoreRepository.ts` / `InMemoryEventLogRepository.ts` — the initial backend. A future `PostgresSignalStoreRepository` / `PostgresEventLogRepository` implements the same interfaces; no call site elsewhere in the codebase needs to change.
+- `src/persistence/clone.ts` — every entry is deep-cloned (`structuredClone`) at both the write boundary (`append`/`upsert`) and the read boundary (`getAll`/`get`/`findByDecisionId`). Without this, callers could mutate an object they passed in or got back and silently rewrite "immutable" history — the append-only guarantee has to hold for real, not just be the absence of an `update()` method.
+- `append()` on `EventLogRepository` throws `DuplicateEventLogEntryError` for a repeated `id`, mirroring the primary-key constraint any real database-backed implementation will also enforce.
+- `tests/persistence/*.contract.ts` — a reusable behavioral test suite per interface (`runSignalStoreRepositoryContractTests`, `runEventLogRepositoryContractTests`), including mutation-after-write and mutation-after-read cases and the duplicate-id case. Any new implementation's test file just imports the contract and calls it with its own factory — if it passes, the implementation is a verified drop-in replacement.
+- Recording an outcome after the fact means **appending** a new `EventLogEntry` for the same `decisionId`, not mutating the original — `findByDecisionId` reconstructs the full history in insertion order. This mirrors the immutable-history guarantee already enforced by the Decision state machine (`OutcomeRecorded` is terminal, `supersedesDecisionId` links a new decision back to an old one).
+
 ## Status
 
-Implements the schemas and pure functions from the spec. Not yet wired to a real Signal Store, EventLog, or Knowledge Graph persistence layer — those are the next milestones once this is reviewed.
+Implements the schemas, pure functions, and in-memory persistence layer from the spec. Not yet wired to a real database (Postgres) or to the Knowledge Graph / Experiment lifecycle / Memory Governance enforcement — those are the next milestones.
 
 ## Design notes from review
 
