@@ -14,6 +14,7 @@ function makeDecision(overrides: Partial<Decision> = {}): Decision {
     createdAt: "2026-07-10T06:00:00Z",
     revisedAt: null,
     revisionReason: null,
+    supersedesDecisionId: null,
     ...overrides,
   };
 }
@@ -30,10 +31,10 @@ describe("canTransition", () => {
     expect(canTransition("Presented", "Rejected")).toBe(true);
   });
 
-  it("allows Revised from any post-Presented state, looping back to Presented", () => {
+  it("allows Revised from pre-outcome post-Presented states, looping back to Presented", () => {
     expect(canTransition("Accepted", "Revised")).toBe(true);
     expect(canTransition("Rejected", "Revised")).toBe(true);
-    expect(canTransition("OutcomeRecorded", "Revised")).toBe(true);
+    expect(canTransition("Ignored", "Revised")).toBe(true);
     expect(canTransition("Revised", "Presented")).toBe(true);
   });
 
@@ -43,6 +44,12 @@ describe("canTransition", () => {
 
   it("rejects going backwards from OutcomeRecorded to Accepted", () => {
     expect(canTransition("OutcomeRecorded", "Accepted")).toBe(false);
+  });
+
+  it("treats OutcomeRecorded as terminal: no outgoing transitions, including Revised", () => {
+    expect(canTransition("OutcomeRecorded", "Revised")).toBe(false);
+    expect(canTransition("OutcomeRecorded", "Presented")).toBe(false);
+    expect(canTransition("OutcomeRecorded", "OutcomeRecorded")).toBe(false);
   });
 });
 
@@ -82,5 +89,23 @@ describe("transition", () => {
     expect(revised.revisionReason).toBe(
       "New sleep signal contradicts original recommendation"
     );
+  });
+
+  it("refuses to revise a decision once its outcome is recorded", () => {
+    const decision = makeDecision({ state: "OutcomeRecorded" });
+    expect(() =>
+      transition(decision, "Revised", { revisionReason: "new signal" })
+    ).toThrow(InvalidTransitionError);
+  });
+
+  it("supports superseding a finished decision with a new one instead of mutating it", () => {
+    const original = makeDecision({ id: "d1", state: "OutcomeRecorded" });
+    const successor = makeDecision({
+      id: "d2",
+      state: "Proposed",
+      supersedesDecisionId: original.id,
+    });
+    expect(successor.supersedesDecisionId).toBe("d1");
+    expect(original.state).toBe("OutcomeRecorded"); // untouched, still history
   });
 });

@@ -82,8 +82,8 @@ describe("calculateConfidence", () => {
   it("approaches 1 for a maxed-out, fully mature decision", () => {
     const confidence = calculateConfidence({
       signalsSnapshot: {
-        s: {
-          signalType: "s",
+        "custom:perfect_signal": {
+          signalType: "custom:perfect_signal",
           latestValue: 1,
           latestTimestamp: "now",
           reliabilityScore: 1,
