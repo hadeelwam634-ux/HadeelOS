@@ -5,15 +5,20 @@ export type UUID = string;
 
 // ---------- Signals ----------
 
-export type SignalType =
+export type KnownSignalType =
   | "sleep_duration"
   | "sleep_quality"
   | "cycle_day"
   | "meeting_count"
   | "weather_temp"
   | "task_completion"
-  | "mood_score"
-  | string; // open for future signal types
+  | "mood_score";
+
+// `| string` on a union collapses the whole type to `string` and silently
+// disables the union's error-checking. Namespacing new/unforeseen signal
+// types under `custom:` keeps the known signals type-checked while still
+// allowing extension.
+export type SignalType = KnownSignalType | `custom:${string}`;
 
 export type SignalSource =
   | "apple_watch"
@@ -39,7 +44,11 @@ export interface SignalStoreEntry {
   syncConsistencyDays: number;
 }
 
-export type SignalStore = Record<SignalType, SignalStoreEntry>;
+// A signal store is almost always partial in practice (most signals
+// aren't available at any given moment) — `Record<SignalType, X>` would
+// (incorrectly) force every known signal key to be present. Partial<>
+// over the full union keeps both known and `custom:` keys optional.
+export type SignalStore = Partial<Record<SignalType, SignalStoreEntry>>;
 
 // ---------- Event Log ----------
 
@@ -88,6 +97,13 @@ export interface Decision {
   createdAt: string;
   revisedAt: string | null;
   revisionReason: string | null;
+  /**
+   * Once a Decision reaches OutcomeRecorded it is closed history and is
+   * never rewritten. If new signals warrant a different recommendation,
+   * a *new* Decision is created that points back here via
+   * supersedesDecisionId, instead of mutating this one to Revised.
+   */
+  supersedesDecisionId: UUID | null;
 }
 
 // ---------- Knowledge Graph ----------

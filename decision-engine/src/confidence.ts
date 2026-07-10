@@ -1,4 +1,4 @@
-import { CausalMaturity, ConfidenceQualifier, SignalStore } from "./types";
+import { CausalMaturity, ConfidenceQualifier, SignalStore, SignalStoreEntry } from "./types";
 
 /**
  * Confidence = w1·SignalReliability + w2·HistoricalAccuracy + w3·CausalMaturityScore
@@ -43,7 +43,11 @@ function clamp(value: number, min = 0, max = 1): number {
 }
 
 export function averageSignalReliability(signalsSnapshot: SignalStore): number {
-  const entries = Object.values(signalsSnapshot);
+  // SignalStore entries are optional (a partial map), so Object.values()
+  // is typed as (SignalStoreEntry | undefined)[]; filter before reducing.
+  const entries = Object.values(signalsSnapshot).filter(
+    (e): e is SignalStoreEntry => e !== undefined
+  );
   if (entries.length === 0) return 0;
   const sum = entries.reduce((acc, e) => acc + e.reliabilityScore, 0);
   return sum / entries.length;

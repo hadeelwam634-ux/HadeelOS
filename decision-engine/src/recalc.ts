@@ -17,9 +17,25 @@ import { calculateConfidence, HistoricalAccuracyInput } from "./confidence";
 
 export interface RecalcInput {
   acceptedDecisions: Decision[];
+  /**
+   * Reserved for Digital Twin-derived adjustments (e.g. scaling forecast
+   * movement by decisionStyle or currentStress). Not yet consumed — the
+   * Twin today only models derived behavioral state (stress, decision
+   * style, energy curve, motivation), not signal data itself, so there is
+   * nothing here yet for the confidence calculation to read.
+   */
   twin: DigitalTwin;
+  /**
+   * The full current SignalStore (every known signal's latest value),
+   * *not* just what changed. Confidence must be computed from the
+   * complete picture the system currently holds, not only from what's
+   * new since the last pass — otherwise a quiet period with no fresh
+   * signals would wrongly zero out signal reliability and tank confidence
+   * even though the system's last-known state is still valid.
+   */
+  currentSignalStore: SignalStore;
   /** Live SignalStore updates since the last recalc pass. */
-  signalStoreDelta: SignalStore;
+  signalStoreDelta: Partial<SignalStore>;
   /** Per-decision-type historical accuracy, normally read from EventLog. */
   accuracyByDecisionType: Record<string, HistoricalAccuracyInput>;
   /** Per-decision-type linked causal maturity, normally read from the Knowledge Graph. */
@@ -72,13 +88,21 @@ function orderByConfidence(
 export function recalc(input: RecalcInput): RecalcOutput {
   const updatedConfidence: Record<string, number> = {};
 
+  // The delta only tells us what changed; confidence must be computed
+  // against the full current picture, so the delta is layered on top of
+  // the current store rather than used on its own.
+  const effectiveSignalStore: SignalStore = {
+    ...input.currentSignalStore,
+    ...input.signalStoreDelta,
+  };
+
   for (const decision of input.acceptedDecisions) {
     const accuracy =
       input.accuracyByDecisionType[decision.type] ?? { successes: 0, totalShown: 0 };
     const maturity = input.causalMaturityByDecisionType[decision.type] ?? null;
 
     updatedConfidence[decision.id] = calculateConfidence({
-      signalsSnapshot: input.signalStoreDelta,
+      signalsSnapshot: effectiveSignalStore,
       historicalAccuracy: accuracy,
       causalMaturity: maturity,
     });

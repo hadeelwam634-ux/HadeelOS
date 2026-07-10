@@ -3,10 +3,17 @@ import { Decision, DecisionState } from "./types";
 /**
  * Decision lifecycle state machine — "Decision Engine Specification v1" §3.
  *
- *   Proposed -> Presented -> { Accepted | Rejected | Ignored } -> OutcomeRecorded
- *                   ^__________________________________________________|
- *                   (Revised: new signals arrived before the outcome window
- *                    closed -> loops back to Presented with a revisionReason)
+ *   Proposed -> Presented -> { Accepted | Rejected | Ignored } -> OutcomeRecorded (terminal)
+ *                   ^______________________________|
+ *                   (Revised: new signals arrived before the outcome was
+ *                    recorded -> loops back to Presented with a revisionReason)
+ *
+ * OutcomeRecorded is terminal by design: once a decision's outcome is
+ * logged it is closed history in the EventLog and must never be rewritten.
+ * If new signals change the recommendation *after* the outcome is
+ * recorded, the caller creates a brand-new Decision with
+ * `supersedesDecisionId` pointing back to this one, rather than
+ * transitioning this one to Revised.
  */
 
 const ALLOWED_TRANSITIONS: Record<DecisionState, DecisionState[]> = {
@@ -15,7 +22,7 @@ const ALLOWED_TRANSITIONS: Record<DecisionState, DecisionState[]> = {
   Accepted: ["OutcomeRecorded", "Revised"],
   Rejected: ["OutcomeRecorded", "Revised"],
   Ignored: ["OutcomeRecorded", "Revised"],
-  OutcomeRecorded: ["Revised"],
+  OutcomeRecorded: [],
   Revised: ["Presented"],
 };
 
