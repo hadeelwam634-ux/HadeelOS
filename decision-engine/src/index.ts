@@ -3,3 +3,4 @@ export * from "./confidence";
 export * from "./decisionStateMachine";
 export * from "./recalc";
 export * from "./persistence";
+export * from "./application";
