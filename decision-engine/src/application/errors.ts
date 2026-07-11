@@ -45,3 +45,18 @@ export class RecalcExecutionError extends ApplicationError {
     this.name = "RecalcExecutionError";
   }
 }
+
+/**
+ * Thrown when a PR #8 orchestration step outside the existing
+ * signal/event-log/recalc error paths fails: deriving the Digital
+ * Twin, reading the Knowledge Graph, or applying memory decay. Kept
+ * distinct from SignalPersistenceError/EventLogPersistenceError/
+ * RecalcExecutionError so a caller can tell which stage of the
+ * pipeline actually failed.
+ */
+export class TodayOrchestrationError extends ApplicationError {
+  constructor(message: string, cause: unknown) {
+    super(message, cause);
+    this.name = "TodayOrchestrationError";
+  }
+}
