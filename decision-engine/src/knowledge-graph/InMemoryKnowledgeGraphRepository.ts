@@ -1,6 +1,6 @@
 import { CausalMaturity, KGEdge, KGNode, UUID } from "../types";
 import { clone } from "../persistence/clone";
-import { assertValidMaturityTransition } from "./CausalMaturityPolicy";
+import { assertValidMaturityTransition, classifyMaturityTransition } from "./CausalMaturityPolicy";
 import {
   DuplicateEdgeError,
   DuplicateNodeError,
@@ -13,17 +13,29 @@ import {
 import {
   AddEdgeOptions,
   KnowledgeGraphRepository,
-  UpdateEdgeMaturityOptions,
+  MaturityTransitionRecord,
+  UpdateEdgeMaturityTransition,
 } from "./KnowledgeGraphRepository";
 
+/**
+ * `confidence < 0 || confidence > 1` alone silently admits NaN, because
+ * every comparison against NaN is false. Number.isFinite() rejects NaN
+ * and +/-Infinity outright, so the range check below only ever sees
+ * real finite numbers.
+ */
 function assertValidConfidence(confidence: number): void {
-  if (confidence < 0 || confidence > 1) {
+  if (!Number.isFinite(confidence) || confidence < 0 || confidence > 1) {
     throw new InvalidConfidenceError(confidence);
   }
 }
 
+/**
+ * Same NaN/Infinity trap as confidence, plus evidenceCount must be a
+ * whole number — Number.isSafeInteger() rejects NaN, +/-Infinity, and
+ * fractional values (e.g. 2.5 "pieces of evidence" is not meaningful).
+ */
 function assertValidEvidenceCount(evidenceCount: number): void {
-  if (evidenceCount < 0) {
+  if (!Number.isSafeInteger(evidenceCount) || evidenceCount < 0) {
     throw new InvalidEvidenceCountError(evidenceCount);
   }
 }
@@ -42,6 +54,9 @@ export class InMemoryKnowledgeGraphRepository implements KnowledgeGraphRepositor
 
   private edges = new Map<UUID, KGEdge>();
   private edgeInsertionOrder: UUID[] = [];
+
+  /** Append-only, per-edge, in insertion order — never mutated or spliced. */
+  private maturityHistory = new Map<UUID, MaturityTransitionRecord[]>();
 
   async addNode(node: KGNode): Promise<void> {
     if (this.nodes.has(node.id)) {
@@ -109,27 +124,57 @@ export class InMemoryKnowledgeGraphRepository implements KnowledgeGraphRepositor
     maturity: CausalMaturity,
     confidence: number,
     evidenceCount: number,
-    reinforcedAt: string,
-    options: UpdateEdgeMaturityOptions = {}
+    transition: UpdateEdgeMaturityTransition
   ): Promise<KGEdge> {
     const existing = this.edges.get(edgeId);
     if (existing === undefined) {
       throw new UnknownEdgeError(edgeId);
     }
 
+    // Every check below throws before anything is written: a failed
+    // validation must leave both the edge and its history untouched.
     assertValidConfidence(confidence);
     assertValidEvidenceCount(evidenceCount);
-    assertValidMaturityTransition(existing.causalMaturity, maturity, options);
+    assertValidMaturityTransition(existing.causalMaturity, maturity, {
+      reason: transition.reason,
+      overrideMaturityTransition: transition.overrideMaturityTransition,
+    });
+
+    const kind = classifyMaturityTransition(existing.causalMaturity, maturity);
 
     const updated: KGEdge = {
       ...existing,
       causalMaturity: maturity,
       confidence,
       evidenceCount,
-      lastReinforcedAt: reinforcedAt,
+      lastReinforcedAt: transition.timestamp,
     };
     this.edges.set(edgeId, clone(updated));
+
+    const record: MaturityTransitionRecord = {
+      id: transition.recordId,
+      edgeId,
+      from: existing.causalMaturity,
+      to: maturity,
+      kind,
+      previousConfidence: existing.confidence,
+      nextConfidence: confidence,
+      previousEvidenceCount: existing.evidenceCount,
+      nextEvidenceCount: evidenceCount,
+      reason: transition.reason ?? null,
+      overrideUsed: kind === "override_skip",
+      timestamp: transition.timestamp,
+    };
+    const history = this.maturityHistory.get(edgeId) ?? [];
+    history.push(clone(record));
+    this.maturityHistory.set(edgeId, history);
+
     return clone(updated);
+  }
+
+  async getMaturityHistory(edgeId: UUID): Promise<MaturityTransitionRecord[]> {
+    const history = this.maturityHistory.get(edgeId) ?? [];
+    return history.map((record) => clone(record));
   }
 
   /** Returns cloned copies of every stored edge, in insertion order. */

@@ -1,6 +1,11 @@
 import { CausalMaturity, KGEdge, KGNode, RecordType, UUID } from "../types";
 import { Clock, IdGenerator } from "../application/types";
-import { AddEdgeOptions, KnowledgeGraphRepository, UpdateEdgeMaturityOptions } from "./KnowledgeGraphRepository";
+import {
+  AddEdgeOptions,
+  KnowledgeGraphRepository,
+  MaturityTransitionRecord,
+  UpdateEdgeMaturityOptions,
+} from "./KnowledgeGraphRepository";
 
 export interface RecordEdgeInput {
   fromNodeId: UUID;
@@ -58,7 +63,13 @@ export class KnowledgeGraphService {
     return edge;
   }
 
-  /** Reinforces an existing edge's maturity/confidence/evidence, stamped with the current time. */
+  /**
+   * Reinforces an existing edge's maturity/confidence/evidence. Stamps
+   * the update with the current time and mints a fresh record ID for
+   * the resulting MaturityTransitionRecord — this is the only place
+   * that ID and timestamp are decided, so the repository stays
+   * deterministic and testable on its own.
+   */
   async reinforceEdge(
     edgeId: UUID,
     maturity: CausalMaturity,
@@ -66,13 +77,16 @@ export class KnowledgeGraphService {
     evidenceCount: number,
     options?: UpdateEdgeMaturityOptions
   ): Promise<KGEdge> {
-    return this.repository.updateEdgeMaturity(
-      edgeId,
-      maturity,
-      confidence,
-      evidenceCount,
-      this.clock.now(),
-      options
-    );
+    return this.repository.updateEdgeMaturity(edgeId, maturity, confidence, evidenceCount, {
+      recordId: this.idGenerator.next(),
+      timestamp: this.clock.now(),
+      reason: options?.reason,
+      overrideMaturityTransition: options?.overrideMaturityTransition,
+    });
+  }
+
+  /** The append-only maturity-change audit trail for an edge, in insertion order. */
+  async getMaturityHistory(edgeId: UUID): Promise<MaturityTransitionRecord[]> {
+    return this.repository.getMaturityHistory(edgeId);
   }
 }

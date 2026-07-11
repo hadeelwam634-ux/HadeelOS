@@ -1,5 +1,5 @@
 import { CausalMaturity, KGEdge, KGNode, UUID } from "../types";
-import { MaturityTransitionOptions } from "./CausalMaturityPolicy";
+import { MaturityTransitionKind, MaturityTransitionOptions } from "./CausalMaturityPolicy";
 
 export interface AddEdgeOptions {
   /**
@@ -11,6 +11,43 @@ export interface AddEdgeOptions {
 }
 
 export type UpdateEdgeMaturityOptions = MaturityTransitionOptions;
+
+/**
+ * Everything needed to apply one updateEdgeMaturity() call and record it
+ * in the audit trail. `recordId` and `timestamp` are caller-supplied
+ * (typically by KnowledgeGraphService, via the injected IdGenerator /
+ * Clock) so the repository never generates IDs or reads the system
+ * clock itself — see the class doc below.
+ */
+export interface UpdateEdgeMaturityTransition {
+  recordId: UUID;
+  timestamp: string;
+  reason?: string;
+  overrideMaturityTransition?: boolean;
+}
+
+/**
+ * One append-only audit-trail entry for a causal-maturity change on an
+ * edge. Written by updateEdgeMaturity() every time it succeeds —
+ * including a same-state reinforcement (kind: "no_change") — and never
+ * written when validation fails. Mirrors the EventLogRepository
+ * append-only pattern from PR #2: there is no update or delete method
+ * for these records anywhere in this interface.
+ */
+export interface MaturityTransitionRecord {
+  id: UUID;
+  edgeId: UUID;
+  from: CausalMaturity;
+  to: CausalMaturity;
+  kind: MaturityTransitionKind;
+  previousConfidence: number;
+  nextConfidence: number;
+  previousEvidenceCount: number;
+  nextEvidenceCount: number;
+  reason: string | null;
+  overrideUsed: boolean;
+  timestamp: string;
+}
 
 /**
  * Storage-agnostic contract for the Knowledge Graph: nodes (Observation
@@ -25,9 +62,10 @@ export type UpdateEdgeMaturityOptions = MaturityTransitionOptions;
  * IDs and timestamps are never generated inside a repository
  * implementation — callers (typically KnowledgeGraphService, which
  * holds the injected IdGenerator/Clock) supply fully-formed KGNode /
- * KGEdge values and, for updateEdgeMaturity, an explicit
- * reinforcedAt timestamp. This keeps repository behavior deterministic
- * and testable without faking the system clock.
+ * KGEdge values and, for updateEdgeMaturity, a fully-formed
+ * `transition` (recordId + timestamp + optional reason/override). This
+ * keeps repository behavior deterministic and testable without faking
+ * the system clock or ID generation.
  */
 export interface KnowledgeGraphRepository {
   /** Throws DuplicateNodeError if node.id already exists. */
@@ -61,24 +99,39 @@ export interface KnowledgeGraphRepository {
 
   /**
    * Updates an existing edge's causal maturity, confidence, and
-   * evidence count, returning the updated edge. `reinforcedAt` is the
-   * caller-supplied timestamp for this update (see class doc above for
-   * why repositories never call the clock themselves).
+   * evidence count, returning the updated edge. `transition.timestamp`
+   * is used both as the edge's new lastReinforcedAt and as the
+   * resulting MaturityTransitionRecord's timestamp (see class doc above
+   * for why repositories never call the clock or an ID generator
+   * themselves).
    *
    * Throws UnknownEdgeError if edgeId does not exist,
    * InvalidConfidenceError / InvalidEvidenceCountError for out-of-range
    * values, and InvalidMaturityTransitionError if the maturity
    * transition is not allowed — see CausalMaturityPolicy.ts for the
    * exact rules (single-step advances are always allowed; skips need
-   * options.overrideMaturityTransition + options.reason; any downgrade
-   * needs options.reason).
+   * transition.overrideMaturityTransition + transition.reason; any
+   * downgrade needs transition.reason). On any of these failures,
+   * nothing is written: the edge is unchanged and no
+   * MaturityTransitionRecord is appended.
+   *
+   * On success, exactly one MaturityTransitionRecord is appended to the
+   * edge's history — including for a same-state ("no_change")
+   * reinforcement — retrievable via getMaturityHistory().
    */
   updateEdgeMaturity(
     edgeId: UUID,
     maturity: CausalMaturity,
     confidence: number,
     evidenceCount: number,
-    reinforcedAt: string,
-    options?: UpdateEdgeMaturityOptions
+    transition: UpdateEdgeMaturityTransition
   ): Promise<KGEdge>;
+
+  /**
+   * The append-only audit trail of every successful updateEdgeMaturity()
+   * call for this edge, in insertion order. Returns an empty array for
+   * an edge with no history yet (including an edge that does not
+   * exist — this method never throws UnknownEdgeError).
+   */
+  getMaturityHistory(edgeId: UUID): Promise<MaturityTransitionRecord[]>;
 }
