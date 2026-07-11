@@ -1,4 +1,4 @@
-import { Decision, DigitalTwin, SignalStore, CausalMaturity } from "./types";
+import { Decision, DigitalTwinSnapshot, SignalStore, CausalMaturity } from "./types";
 import { calculateConfidence, HistoricalAccuracyInput } from "./confidence";
 
 /**
@@ -19,12 +19,18 @@ export interface RecalcInput {
   acceptedDecisions: Decision[];
   /**
    * Reserved for Digital Twin-derived adjustments (e.g. scaling forecast
-   * movement by decisionStyle or currentStress). Not yet consumed — the
-   * Twin today only models derived behavioral state (stress, decision
-   * style, energy curve, motivation), not signal data itself, so there is
-   * nothing here yet for the confidence calculation to read.
+   * movement by decisionStyle or stress). Not yet consumed — the Twin
+   * today only models derived behavioral state (stress, decision style,
+   * energy curve, behavior patterns), not signal data itself, so there
+   * is nothing here yet for the confidence calculation to read.
+   *
+   * Type migrated from the earlier, simpler `DigitalTwin` to the richer
+   * `DigitalTwinSnapshot` (see src/types.ts and src/twin/) — a
+   * type-only change. This field was never read anywhere in this
+   * function's body before the migration and still isn't, so recalc()'s
+   * behavior is unchanged.
    */
-  twin: DigitalTwin;
+  twin: DigitalTwinSnapshot;
   /**
    * The full current SignalStore (every known signal's latest value),
    * *not* just what changed. Confidence must be computed from the

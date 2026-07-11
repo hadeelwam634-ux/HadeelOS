@@ -1,16 +1,19 @@
 import { describe, it, expect } from "vitest";
 import { recalc } from "../src/recalc";
-import { Decision, DigitalTwin, SignalStore } from "../src/types";
+import { Decision, DigitalTwinSnapshot, SignalStore } from "../src/types";
 
-function makeTwin(): DigitalTwin {
+function makeTwin(): DigitalTwinSnapshot {
   return {
+    id: "twin-1",
     userId: "u1",
-    currentStress: "low",
+    derivedAt: "2026-07-10T06:00:00Z",
+    stress: "low",
+    energyCurve: [{ hour: 9, expectedEnergy: 0.7, confidence: 0.6 }],
     decisionStyle: "decisive",
-    energyCurveShape: "morning_peak",
-    motivation: "high",
-    lastComputedAt: "2026-07-10T06:00:00Z",
-    version: 1,
+    behaviorPatterns: [],
+    knownPreferences: [],
+    activeConstraints: [],
+    sourceVersions: { signalsUpdatedAt: null, eventLogCursor: null, graphVersion: null },
   };
 }
 

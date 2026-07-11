@@ -1,7 +1,7 @@
 import {
   CausalMaturity,
   Decision,
-  DigitalTwin,
+  DigitalTwinSnapshot,
   SignalStore,
   SignalType,
   UUID,
@@ -16,7 +16,7 @@ import { RecalcOutput } from "../recalc";
  */
 export interface RecalculateDayCommand {
   acceptedDecisions: Decision[];
-  twin: DigitalTwin;
+  twin: DigitalTwinSnapshot;
   signalStoreDelta: SignalStore;
   accuracyByDecisionType: Record<string, HistoricalAccuracyInput>;
   causalMaturityByDecisionType: Record<string, CausalMaturity | null>;

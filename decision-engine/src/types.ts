@@ -193,16 +193,100 @@ export interface Experiment {
   endedAt: string | null;
 }
 
-// ---------- Digital Twin ----------
+// ---------- Digital Twin Snapshot (PR #6) ----------
+//
+// A persisted derivation of user state. DigitalTwinSnapshot is derived
+// by DigitalTwinService from the Signal Store, Event Log, Knowledge
+// Graph, Hypotheses, and Experiments — see src/twin/ — and never
+// stores raw signal values itself, only interpreted/derived fields.
+//
+// This replaces the earlier, simpler `DigitalTwin` type that recalc()
+// and the Application Service originally depended on (from the initial
+// Decision Engine Specification v1). That type has been migrated away
+// from entirely: `RecalcInput.twin` / `RecalculateDayCommand.twin` now
+// both use DigitalTwinSnapshot, and the old interface has been removed
+// from this file since nothing referenced it anymore. Neither
+// recalc() nor DecisionApplicationService ever read any field off
+// `twin` — it was (and remains) a reserved, unused pass-through field —
+// so this was a type-only migration with no behavior change.
 
-export interface DigitalTwin {
+export interface EnergyCurvePoint {
+  hour: number; // 0-23
+  expectedEnergy: number; // 0..1
+  confidence: number; // 0..1
+}
+
+export interface DigitalTwinSourceVersions {
+  signalsUpdatedAt: string | null;
+  eventLogCursor: string | null;
+  graphVersion: string | null;
+}
+
+export interface DigitalTwinSnapshot {
+  id: UUID;
   userId: UUID;
-  currentStress: "low" | "medium" | "high";
-  decisionStyle: "reflective" | "decisive";
-  energyCurveShape: "morning_peak" | "afternoon_peak" | "evening_peak" | "flat";
-  motivation: "low" | "medium" | "high";
-  lastComputedAt: string;
-  version: number;
+  derivedAt: string;
+
+  stress: "low" | "medium" | "high" | "unknown";
+  energyCurve: EnergyCurvePoint[];
+
+  decisionStyle: string | null;
+  behaviorPatterns: string[];
+  knownPreferences: string[];
+  activeConstraints: string[];
+
+  sourceVersions: DigitalTwinSourceVersions;
+}
+
+// ---------- Memory Governance (PR #6) ----------
+//
+// A persisted per-fact memory model with an append-only governance
+// audit trail. See src/memory/.
+
+export type MemoryState = "Missing" | "Learning" | "Knows";
+
+export type MemoryRegressionReason =
+  | "evidence_decay"
+  | "stale_data"
+  | "contradiction"
+  | "user_correction"
+  | "user_forget"
+  | "experiment_opt_out"
+  | "source_disabled"
+  | "unreliable_source";
+
+export interface MemoryRecord {
+  id: UUID;
+  userId: UUID;
+  key: string;
+  state: MemoryState;
+  value: unknown;
+  confidence: number;
+  evidenceCount: number;
+  lastReinforcedAt: string;
+  blocked: boolean;
+}
+
+export type MemoryGovernanceActor = "system" | "user";
+
+export type MemoryGovernanceAction =
+  | "promote"
+  | "demote"
+  | "correct"
+  | "forget"
+  | "block_inference"
+  | "unblock_inference";
+
+/** Append-only — no update or delete method exists anywhere in this module. */
+export interface MemoryGovernanceRecord {
+  id: UUID;
+  memoryId: UUID;
+  actor: MemoryGovernanceActor;
+  action: MemoryGovernanceAction;
+  previousState: string | null;
+  nextState: string | null;
+  reason: string;
+  timestamp: string;
 }
 
 // ---------- Journal ----------
@@ -216,20 +300,8 @@ export interface JournalEntry {
   linkedExperimentId: UUID | null;
 }
 
-// ---------- Memory Governance ----------
-
-export type GovernanceAction =
-  | "decay"
-  | "delete"
-  | "user_correction"
-  | "user_forget"
-  | "experiment_opt_out";
-
-export interface MemoryGovernanceLogEntry {
-  id: UUID;
-  action: GovernanceAction;
-  targetId: UUID;
-  targetType: string;
-  timestamp: string;
-  actor: "system" | "user";
-}
+// The original "Memory Governance" section (GovernanceAction /
+// MemoryGovernanceLogEntry) has been removed: it predated the PR #6
+// Memory module, was never referenced anywhere outside this file, and
+// is fully superseded by MemoryGovernanceAction / MemoryGovernanceRecord
+// above.

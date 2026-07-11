@@ -6,3 +6,5 @@ export * from "./persistence";
 export * from "./application";
 export * from "./knowledge-graph";
 export * from "./learning";
+export * from "./twin";
+export * from "./memory";
