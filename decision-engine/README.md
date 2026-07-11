@@ -27,9 +27,17 @@ npm test
 - `tests/persistence/*.contract.ts` — a reusable behavioral test suite per interface (`runSignalStoreRepositoryContractTests`, `runEventLogRepositoryContractTests`), including mutation-after-write and mutation-after-read cases and the duplicate-id case. Any new implementation's test file just imports the contract and calls it with its own factory — if it passes, the implementation is a verified drop-in replacement.
 - Recording an outcome after the fact means **appending** a new `EventLogEntry` for the same `decisionId`, not mutating the original — `findByDecisionId` reconstructs the full history in insertion order. This mirrors the immutable-history guarantee already enforced by the Decision state machine (`OutcomeRecorded` is terminal, `supersedesDecisionId` links a new decision back to an old one).
 
+## Application service (PR #3)
+
+- `src/application/DecisionApplicationService.ts` — the **only** entry point that is allowed to call `SignalStoreRepository`, `EventLogRepository`, or `recalc()`. Nothing else in the codebase (and, later, the API layer) should reach past this class into the repositories or domain functions directly.
+- `recalculateDay()` always runs in this fixed order: read the current signal store → upsert the incoming signal delta → read the effective signal store back from the repository (not just merged locally, so recalc() and the Event Log see exactly what was persisted) → call `recalc()` → append one `EventLogEntry` per accepted decision. Nothing is written to the Event Log until `recalc()` has succeeded.
+- `src/application/types.ts` — `RecalculateDayCommand` / `RecalculateDayResult` (the only shapes a future API/UI layer needs to know about), plus the injectable `IdGenerator` and `Clock` dependencies (with `RandomIdGenerator` / `SystemClock` as the real-usage defaults) that keep event IDs and timestamps out of the service's own hands so tests can be fully deterministic.
+- `src/application/errors.ts` — `ApplicationError` and its subclasses (`SignalPersistenceError`, `EventLogPersistenceError`, `RecalcExecutionError`) so callers outside this package only ever need to handle one error hierarchy, never repository- or recalc()-specific failures directly.
+- The service never returns repository internals: signal stores, forecasts, and ID lists returned from `recalculateDay()` are freshly built values, so mutating a result never mutates stored state.
+
 ## Status
 
-Implements the schemas, pure functions, and in-memory persistence layer from the spec. Not yet wired to a real database (Postgres) or to the Knowledge Graph / Experiment lifecycle / Memory Governance enforcement — those are the next milestones.
+Implements the schemas, pure functions, in-memory persistence layer, and the Application Service that orchestrates them from the spec. Not yet wired to a real database (Postgres) or to the Knowledge Graph / Experiment lifecycle / Memory Governance enforcement — those are the next milestones.
 
 ## Design notes from review
 
