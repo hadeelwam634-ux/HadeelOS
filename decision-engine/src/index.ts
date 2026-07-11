@@ -4,3 +4,4 @@ export * from "./decisionStateMachine";
 export * from "./recalc";
 export * from "./persistence";
 export * from "./application";
+export * from "./knowledge-graph";
