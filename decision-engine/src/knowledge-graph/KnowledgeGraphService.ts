@@ -89,4 +89,14 @@ export class KnowledgeGraphService {
   async getMaturityHistory(edgeId: UUID): Promise<MaturityTransitionRecord[]> {
     return this.repository.getMaturityHistory(edgeId);
   }
+
+  /**
+   * Thin read passthrough — added in PR #5 so other application services
+   * (e.g. ExperimentService, which needs an edge's current maturity and
+   * confidence before reinforcing it) never have to reach past this
+   * service into KnowledgeGraphRepository directly.
+   */
+  async getEdge(edgeId: UUID): Promise<KGEdge | undefined> {
+    return this.repository.getEdge(edgeId);
+  }
 }

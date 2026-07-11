@@ -181,6 +181,13 @@ export interface Experiment {
   washoutPeriodDays: number;
   category: ExperimentCategory;
   requiresExplicitConsent: boolean;
+  /**
+   * Recorded true only when the user has explicitly consented to run
+   * this experiment (see learning/ExperimentPolicy.ts). health and
+   * financial category experiments cannot leave "awaiting_consent"
+   * while this is false — added in PR #5 alongside the Learning Engine.
+   */
+  consentGiven: boolean;
   status: ExperimentStatus;
   startedAt: string | null;
   endedAt: string | null;

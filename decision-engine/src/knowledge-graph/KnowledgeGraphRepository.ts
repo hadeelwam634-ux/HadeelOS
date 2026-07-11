@@ -107,12 +107,16 @@ export interface KnowledgeGraphRepository {
    *
    * Throws UnknownEdgeError if edgeId does not exist,
    * InvalidConfidenceError / InvalidEvidenceCountError for out-of-range
-   * values, and InvalidMaturityTransitionError if the maturity
-   * transition is not allowed — see CausalMaturityPolicy.ts for the
-   * exact rules (single-step advances are always allowed; skips need
+   * values, InvalidMaturityTransitionError if the maturity transition is
+   * not allowed — see CausalMaturityPolicy.ts for the exact rules
+   * (single-step advances are always allowed; skips need
    * transition.overrideMaturityTransition + transition.reason; any
-   * downgrade needs transition.reason). On any of these failures,
-   * nothing is written: the edge is unchanged and no
+   * downgrade needs transition.reason) — and
+   * DuplicateMaturityTransitionRecordError if transition.recordId
+   * already identifies a MaturityTransitionRecord on any edge (checked
+   * globally, not just this edge's own history, mirroring
+   * EventLogRepository's id-uniqueness guarantee). On any of these
+   * failures, nothing is written: the edge is unchanged and no
    * MaturityTransitionRecord is appended.
    *
    * On success, exactly one MaturityTransitionRecord is appended to the
