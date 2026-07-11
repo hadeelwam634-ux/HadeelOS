@@ -7,6 +7,7 @@ import {
   SignalPersistenceError,
 } from "../../src/application/errors";
 import { Clock, IdGenerator } from "../../src/application/types";
+import { calculateConfidence } from "../../src/confidence";
 import { InMemorySignalStoreRepository } from "../../src/persistence/InMemorySignalStoreRepository";
 import { InMemoryEventLogRepository } from "../../src/persistence/InMemoryEventLogRepository";
 import { EventLogRepository } from "../../src/persistence/EventLogRepository";
@@ -103,6 +104,37 @@ class FailingAppendEventLogRepository implements EventLogRepository {
   }
   async getAll() {
     return this.inner.getAll();
+  }
+}
+
+/**
+ * A SignalStoreRepository that mimics a real database's write-time
+ * normalization (e.g. a CHECK constraint clamping reliabilityScore to
+ * [0, 1]). Used to prove that recalc() is computed from what the
+ * repository actually persisted, not from the raw value the caller
+ * asked to persist.
+ */
+class NormalizingSignalStoreRepository implements SignalStoreRepository {
+  private readonly inner = new InMemorySignalStoreRepository();
+
+  private normalize(entry: SignalStoreEntry): SignalStoreEntry {
+    return { ...entry, reliabilityScore: Math.min(1, Math.max(0, entry.reliabilityScore)) };
+  }
+
+  async upsert(entry: SignalStoreEntry): Promise<void> {
+    return this.inner.upsert(this.normalize(entry));
+  }
+  async upsertMany(entries: SignalStoreEntry[]): Promise<void> {
+    return this.inner.upsertMany(entries.map((e) => this.normalize(e)));
+  }
+  async get(signalType: SignalStoreEntry["signalType"]) {
+    return this.inner.get(signalType);
+  }
+  async getAll(): Promise<SignalStore> {
+    return this.inner.getAll();
+  }
+  async delete(signalType: SignalStoreEntry["signalType"]): Promise<void> {
+    return this.inner.delete(signalType);
   }
 }
 
@@ -225,6 +257,48 @@ describe("DecisionApplicationService.recalculateDay", () => {
     const expectedAvgReliability = (0.6 + 1) / 2;
     expect(expectedAvgReliability).toBeCloseTo(0.8, 5);
     expect(result.recalculation.updatedConfidence["d1"]).toBeGreaterThan(0);
+  });
+
+  it("uses the persisted (post-normalization) effective store for recalc, not the raw command input", async () => {
+    // The repository clamps reliabilityScore to [0, 1] on write, the way
+    // a real database CHECK constraint would. recalc() must be computed
+    // from what was actually saved (1.0), never from the raw 1.4 the
+    // command supplied — otherwise recalc()'s output (and the Event Log
+    // snapshot built from it) would silently diverge from persisted state.
+    const { service } = makeService({
+      signalStoreRepository: new NormalizingSignalStoreRepository(),
+    });
+    const decision = makeDecision("d1", "quran_timing");
+
+    // Chosen so accuracy + maturity alone total 0.30 (well under the
+    // [0,1] clamp ceiling) — otherwise a persisted value of 1 and a raw
+    // value of 1.4 could both saturate to the same clamped confidence
+    // and mask the bug this test exists to catch.
+    const result = await service.recalculateDay({
+      acceptedDecisions: [decision],
+      twin: makeTwin(),
+      signalStoreDelta: { sleep_quality: makeSignalEntry({ reliabilityScore: 1.4 }) },
+      accuracyByDecisionType: { quran_timing: { successes: 5, totalShown: 10 } },
+      causalMaturityByDecisionType: { quran_timing: "correlated" },
+      baselineForecast,
+    });
+
+    const expectedFromPersistedValue = calculateConfidence({
+      signalsSnapshot: { sleep_quality: makeSignalEntry({ reliabilityScore: 1 }) },
+      historicalAccuracy: { successes: 5, totalShown: 10 },
+      causalMaturity: "correlated",
+    });
+
+    expect(result.recalculation.updatedConfidence["d1"]).toBeCloseTo(expectedFromPersistedValue, 10);
+
+    // Sanity check: this genuinely would have been a different number
+    // had the raw, unpersisted 1.4 been used instead.
+    const wouldHaveBeenIfRawValueWereUsed = calculateConfidence({
+      signalsSnapshot: { sleep_quality: makeSignalEntry({ reliabilityScore: 1.4 }) },
+      historicalAccuracy: { successes: 5, totalShown: 10 },
+      causalMaturity: "correlated",
+    });
+    expect(wouldHaveBeenIfRawValueWereUsed).not.toBeCloseTo(expectedFromPersistedValue, 10);
   });
 
   it("adds one EventLog entry per accepted decision", async () => {
