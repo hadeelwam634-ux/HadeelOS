@@ -96,6 +96,32 @@ describe("KnowledgeGraphService", () => {
     expect((await repository.getEdge(edge.id))?.causalMaturity).toBe("suspected_causal");
   });
 
+  it("reinforceEdge mints a fresh record id and getMaturityHistory exposes the resulting record", async () => {
+    const { service } = makeService();
+    const a = await service.recordNode("sleep");
+    const b = await service.recordNode("mood");
+    const edge = await service.recordEdge({
+      fromNodeId: a.id,
+      toNodeId: b.id,
+      recordType: "Observation",
+      directionBasis: "temporal_precedence",
+    });
+
+    await service.reinforceEdge(edge.id, "suspected_causal", 0.7, 5);
+
+    const history = await service.getMaturityHistory(edge.id);
+    expect(history).toHaveLength(1);
+    expect(history[0]).toMatchObject({
+      edgeId: edge.id,
+      from: "correlated",
+      to: "suspected_causal",
+      kind: "advance_one_step",
+      timestamp: "2026-07-11T06:00:00Z",
+    });
+    // ids so far: kg-1 (node a), kg-2 (node b), kg-3 (edge), kg-4 (this record)
+    expect(history[0].id).toBe("kg-4");
+  });
+
   it("recordEdge propagates AddEdgeOptions (e.g. allowSelfEdge) to the repository", async () => {
     const { service } = makeService();
     const a = await service.recordNode("sleep");

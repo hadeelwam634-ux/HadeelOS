@@ -158,10 +158,46 @@ export function runKnowledgeGraphRepositoryContractTests(
         );
       });
 
+      it("rejects NaN confidence", async () => {
+        const repo = makeRepo();
+        await seedTwoNodes(repo);
+        await expect(repo.addEdge(makeEdge({ confidence: NaN }))).rejects.toThrow(
+          InvalidConfidenceError
+        );
+      });
+
+      it("rejects Infinity and -Infinity confidence", async () => {
+        const repo = makeRepo();
+        await seedTwoNodes(repo);
+        await expect(repo.addEdge(makeEdge({ confidence: Infinity }))).rejects.toThrow(
+          InvalidConfidenceError
+        );
+        await expect(repo.addEdge(makeEdge({ confidence: -Infinity }))).rejects.toThrow(
+          InvalidConfidenceError
+        );
+      });
+
       it("rejects a negative evidenceCount", async () => {
         const repo = makeRepo();
         await seedTwoNodes(repo);
         await expect(repo.addEdge(makeEdge({ evidenceCount: -1 }))).rejects.toThrow(
+          InvalidEvidenceCountError
+        );
+      });
+
+      it("rejects NaN, Infinity, -Infinity, and fractional evidenceCount", async () => {
+        const repo = makeRepo();
+        await seedTwoNodes(repo);
+        await expect(repo.addEdge(makeEdge({ evidenceCount: NaN }))).rejects.toThrow(
+          InvalidEvidenceCountError
+        );
+        await expect(repo.addEdge(makeEdge({ evidenceCount: Infinity }))).rejects.toThrow(
+          InvalidEvidenceCountError
+        );
+        await expect(repo.addEdge(makeEdge({ evidenceCount: -Infinity }))).rejects.toThrow(
+          InvalidEvidenceCountError
+        );
+        await expect(repo.addEdge(makeEdge({ evidenceCount: 2.5 }))).rejects.toThrow(
           InvalidEvidenceCountError
         );
       });
@@ -240,20 +276,20 @@ export function runKnowledgeGraphRepositoryContractTests(
       it("throws UnknownEdgeError for an edge that does not exist", async () => {
         const repo = makeRepo();
         await expect(
-          repo.updateEdgeMaturity("missing", "suspected_causal", 0.5, 2, "2026-07-11T00:00:00Z")
+          repo.updateEdgeMaturity("missing", "suspected_causal", 0.5, 2, {
+            recordId: "r1",
+            timestamp: "2026-07-11T00:00:00Z",
+          })
         ).rejects.toThrow(UnknownEdgeError);
       });
 
       it("allows a single natural step forward", async () => {
         const repo = makeRepo();
         await seedEdge(repo);
-        const updated = await repo.updateEdgeMaturity(
-          "e1",
-          "suspected_causal",
-          0.6,
-          3,
-          "2026-07-11T00:00:00Z"
-        );
+        const updated = await repo.updateEdgeMaturity("e1", "suspected_causal", 0.6, 3, {
+          recordId: "r1",
+          timestamp: "2026-07-11T00:00:00Z",
+        });
         expect(updated.causalMaturity).toBe("suspected_causal");
         expect(updated.confidence).toBe(0.6);
         expect(updated.evidenceCount).toBe(3);
@@ -265,7 +301,10 @@ export function runKnowledgeGraphRepositoryContractTests(
         const repo = makeRepo();
         await seedEdge(repo);
         await expect(
-          repo.updateEdgeMaturity("e1", "stable_causal", 0.9, 10, "2026-07-11T00:00:00Z")
+          repo.updateEdgeMaturity("e1", "stable_causal", 0.9, 10, {
+            recordId: "r1",
+            timestamp: "2026-07-11T00:00:00Z",
+          })
         ).rejects.toThrow(InvalidMaturityTransitionError);
       });
 
@@ -273,7 +312,9 @@ export function runKnowledgeGraphRepositoryContractTests(
         const repo = makeRepo();
         await seedEdge(repo);
         await expect(
-          repo.updateEdgeMaturity("e1", "stable_causal", 0.9, 10, "2026-07-11T00:00:00Z", {
+          repo.updateEdgeMaturity("e1", "stable_causal", 0.9, 10, {
+            recordId: "r1",
+            timestamp: "2026-07-11T00:00:00Z",
             overrideMaturityTransition: true,
           })
         ).rejects.toThrow(InvalidMaturityTransitionError);
@@ -282,38 +323,42 @@ export function runKnowledgeGraphRepositoryContractTests(
       it("allows skipping steps with overrideMaturityTransition + a reason", async () => {
         const repo = makeRepo();
         await seedEdge(repo);
-        const updated = await repo.updateEdgeMaturity(
-          "e1",
-          "stable_causal",
-          0.95,
-          20,
-          "2026-07-11T00:00:00Z",
-          { overrideMaturityTransition: true, reason: "manually verified via external audit" }
-        );
+        const updated = await repo.updateEdgeMaturity("e1", "stable_causal", 0.95, 20, {
+          recordId: "r1",
+          timestamp: "2026-07-11T00:00:00Z",
+          overrideMaturityTransition: true,
+          reason: "manually verified via external audit",
+        });
         expect(updated.causalMaturity).toBe("stable_causal");
       });
 
       it("rejects a silent downgrade without a reason", async () => {
         const repo = makeRepo();
         await seedEdge(repo);
-        await repo.updateEdgeMaturity("e1", "suspected_causal", 0.6, 3, "2026-07-11T00:00:00Z");
+        await repo.updateEdgeMaturity("e1", "suspected_causal", 0.6, 3, {
+          recordId: "r1",
+          timestamp: "2026-07-11T00:00:00Z",
+        });
         await expect(
-          repo.updateEdgeMaturity("e1", "correlated", 0.3, 3, "2026-07-11T01:00:00Z")
+          repo.updateEdgeMaturity("e1", "correlated", 0.3, 3, {
+            recordId: "r2",
+            timestamp: "2026-07-11T01:00:00Z",
+          })
         ).rejects.toThrow(InvalidMaturityTransitionError);
       });
 
       it("allows a downgrade when a reason is given", async () => {
         const repo = makeRepo();
         await seedEdge(repo);
-        await repo.updateEdgeMaturity("e1", "suspected_causal", 0.6, 3, "2026-07-11T00:00:00Z");
-        const downgraded = await repo.updateEdgeMaturity(
-          "e1",
-          "correlated",
-          0.3,
-          3,
-          "2026-07-11T01:00:00Z",
-          { reason: "contradicting evidence found" }
-        );
+        await repo.updateEdgeMaturity("e1", "suspected_causal", 0.6, 3, {
+          recordId: "r1",
+          timestamp: "2026-07-11T00:00:00Z",
+        });
+        const downgraded = await repo.updateEdgeMaturity("e1", "correlated", 0.3, 3, {
+          recordId: "r2",
+          timestamp: "2026-07-11T01:00:00Z",
+          reason: "contradicting evidence found",
+        });
         expect(downgraded.causalMaturity).toBe("correlated");
       });
 
@@ -321,7 +366,38 @@ export function runKnowledgeGraphRepositoryContractTests(
         const repo = makeRepo();
         await seedEdge(repo);
         await expect(
-          repo.updateEdgeMaturity("e1", "suspected_causal", 1.5, 3, "2026-07-11T00:00:00Z")
+          repo.updateEdgeMaturity("e1", "suspected_causal", 1.5, 3, {
+            recordId: "r1",
+            timestamp: "2026-07-11T00:00:00Z",
+          })
+        ).rejects.toThrow(InvalidConfidenceError);
+      });
+
+      it("rejects NaN confidence on update", async () => {
+        const repo = makeRepo();
+        await seedEdge(repo);
+        await expect(
+          repo.updateEdgeMaturity("e1", "suspected_causal", NaN, 3, {
+            recordId: "r1",
+            timestamp: "2026-07-11T00:00:00Z",
+          })
+        ).rejects.toThrow(InvalidConfidenceError);
+      });
+
+      it("rejects Infinity and -Infinity confidence on update", async () => {
+        const repo = makeRepo();
+        await seedEdge(repo);
+        await expect(
+          repo.updateEdgeMaturity("e1", "suspected_causal", Infinity, 3, {
+            recordId: "r1",
+            timestamp: "2026-07-11T00:00:00Z",
+          })
+        ).rejects.toThrow(InvalidConfidenceError);
+        await expect(
+          repo.updateEdgeMaturity("e1", "suspected_causal", -Infinity, 3, {
+            recordId: "r2",
+            timestamp: "2026-07-11T00:00:00Z",
+          })
         ).rejects.toThrow(InvalidConfidenceError);
       });
 
@@ -329,22 +405,221 @@ export function runKnowledgeGraphRepositoryContractTests(
         const repo = makeRepo();
         await seedEdge(repo);
         await expect(
-          repo.updateEdgeMaturity("e1", "suspected_causal", 0.6, -1, "2026-07-11T00:00:00Z")
+          repo.updateEdgeMaturity("e1", "suspected_causal", 0.6, -1, {
+            recordId: "r1",
+            timestamp: "2026-07-11T00:00:00Z",
+          })
+        ).rejects.toThrow(InvalidEvidenceCountError);
+      });
+
+      it("rejects NaN, Infinity, -Infinity, and fractional evidenceCount on update", async () => {
+        const repo = makeRepo();
+        await seedEdge(repo);
+        await expect(
+          repo.updateEdgeMaturity("e1", "suspected_causal", 0.6, NaN, {
+            recordId: "r1",
+            timestamp: "2026-07-11T00:00:00Z",
+          })
+        ).rejects.toThrow(InvalidEvidenceCountError);
+        await expect(
+          repo.updateEdgeMaturity("e1", "suspected_causal", 0.6, Infinity, {
+            recordId: "r2",
+            timestamp: "2026-07-11T00:00:00Z",
+          })
+        ).rejects.toThrow(InvalidEvidenceCountError);
+        await expect(
+          repo.updateEdgeMaturity("e1", "suspected_causal", 0.6, -Infinity, {
+            recordId: "r3",
+            timestamp: "2026-07-11T00:00:00Z",
+          })
+        ).rejects.toThrow(InvalidEvidenceCountError);
+        await expect(
+          repo.updateEdgeMaturity("e1", "suspected_causal", 0.6, 2.5, {
+            recordId: "r4",
+            timestamp: "2026-07-11T00:00:00Z",
+          })
         ).rejects.toThrow(InvalidEvidenceCountError);
       });
 
       it("mutating an object returned from updateEdgeMaturity() does not affect the stored edge", async () => {
         const repo = makeRepo();
         await seedEdge(repo);
-        const updated = await repo.updateEdgeMaturity(
-          "e1",
-          "suspected_causal",
-          0.6,
-          3,
-          "2026-07-11T00:00:00Z"
-        );
+        const updated = await repo.updateEdgeMaturity("e1", "suspected_causal", 0.6, 3, {
+          recordId: "r1",
+          timestamp: "2026-07-11T00:00:00Z",
+        });
         updated.confidence = 0.99;
         expect((await repo.getEdge("e1"))?.confidence).toBe(0.6);
+      });
+    });
+
+    describe("maturity transition history", () => {
+      async function seedEdge(repo: KnowledgeGraphRepository) {
+        await repo.addNode(makeNode({ id: "n1" }));
+        await repo.addNode(makeNode({ id: "n2" }));
+        await repo.addEdge(
+          makeEdge({ causalMaturity: "correlated", confidence: 0.3, evidenceCount: 1 })
+        );
+      }
+
+      it("returns an empty array for an edge with no history yet", async () => {
+        const repo = makeRepo();
+        await seedEdge(repo);
+        expect(await repo.getMaturityHistory("e1")).toEqual([]);
+      });
+
+      it("returns an empty array for an edge that does not exist", async () => {
+        const repo = makeRepo();
+        expect(await repo.getMaturityHistory("missing")).toEqual([]);
+      });
+
+      it("a natural advance records a history entry with reason: null and overrideUsed: false", async () => {
+        const repo = makeRepo();
+        await seedEdge(repo);
+        await repo.updateEdgeMaturity("e1", "suspected_causal", 0.6, 3, {
+          recordId: "r1",
+          timestamp: "2026-07-11T00:00:00Z",
+        });
+
+        const history = await repo.getMaturityHistory("e1");
+        expect(history).toHaveLength(1);
+        expect(history[0]).toMatchObject({
+          id: "r1",
+          edgeId: "e1",
+          from: "correlated",
+          to: "suspected_causal",
+          kind: "advance_one_step",
+          previousConfidence: 0.3,
+          nextConfidence: 0.6,
+          previousEvidenceCount: 1,
+          nextEvidenceCount: 3,
+          reason: null,
+          overrideUsed: false,
+          timestamp: "2026-07-11T00:00:00Z",
+        });
+      });
+
+      it("a downgrade records the given reason", async () => {
+        const repo = makeRepo();
+        await seedEdge(repo);
+        await repo.updateEdgeMaturity("e1", "suspected_causal", 0.6, 3, {
+          recordId: "r1",
+          timestamp: "2026-07-11T00:00:00Z",
+        });
+        await repo.updateEdgeMaturity("e1", "correlated", 0.3, 3, {
+          recordId: "r2",
+          timestamp: "2026-07-11T01:00:00Z",
+          reason: "contradicting evidence found",
+        });
+
+        const history = await repo.getMaturityHistory("e1");
+        const downgradeRecord = history.find((r) => r.id === "r2");
+        expect(downgradeRecord).toMatchObject({
+          kind: "downgrade",
+          from: "suspected_causal",
+          to: "correlated",
+          reason: "contradicting evidence found",
+          overrideUsed: false,
+        });
+      });
+
+      it("an override-skip records overrideUsed: true", async () => {
+        const repo = makeRepo();
+        await seedEdge(repo);
+        await repo.updateEdgeMaturity("e1", "stable_causal", 0.95, 20, {
+          recordId: "r1",
+          timestamp: "2026-07-11T00:00:00Z",
+          overrideMaturityTransition: true,
+          reason: "manually verified via external audit",
+        });
+
+        const [record] = await repo.getMaturityHistory("e1");
+        expect(record).toMatchObject({
+          kind: "override_skip",
+          overrideUsed: true,
+          reason: "manually verified via external audit",
+        });
+      });
+
+      it("a same-state reinforcement records a history entry with kind: no_change", async () => {
+        const repo = makeRepo();
+        await seedEdge(repo);
+        await repo.updateEdgeMaturity("e1", "correlated", 0.5, 4, {
+          recordId: "r1",
+          timestamp: "2026-07-11T00:00:00Z",
+        });
+
+        const history = await repo.getMaturityHistory("e1");
+        expect(history).toHaveLength(1);
+        expect(history[0]).toMatchObject({
+          kind: "no_change",
+          from: "correlated",
+          to: "correlated",
+          previousConfidence: 0.3,
+          nextConfidence: 0.5,
+          previousEvidenceCount: 1,
+          nextEvidenceCount: 4,
+        });
+      });
+
+      it("records are returned in stable insertion order across multiple updates", async () => {
+        const repo = makeRepo();
+        await seedEdge(repo);
+        await repo.updateEdgeMaturity("e1", "suspected_causal", 0.5, 2, {
+          recordId: "r1",
+          timestamp: "2026-07-11T00:00:00Z",
+        });
+        await repo.updateEdgeMaturity("e1", "experimentally_supported", 0.7, 5, {
+          recordId: "r2",
+          timestamp: "2026-07-11T01:00:00Z",
+        });
+        await repo.updateEdgeMaturity("e1", "stable_causal", 0.9, 8, {
+          recordId: "r3",
+          timestamp: "2026-07-11T02:00:00Z",
+        });
+
+        const history = await repo.getMaturityHistory("e1");
+        expect(history.map((r) => r.id)).toEqual(["r1", "r2", "r3"]);
+      });
+
+      it("mutating a returned history record does not affect stored history", async () => {
+        const repo = makeRepo();
+        await seedEdge(repo);
+        await repo.updateEdgeMaturity("e1", "suspected_causal", 0.6, 3, {
+          recordId: "r1",
+          timestamp: "2026-07-11T00:00:00Z",
+        });
+
+        const [record] = await repo.getMaturityHistory("e1");
+        record.reason = "tampered";
+        record.overrideUsed = true;
+
+        const [stored] = await repo.getMaturityHistory("e1");
+        expect(stored.reason).toBeNull();
+        expect(stored.overrideUsed).toBe(false);
+      });
+
+      it("a failed validation adds no history record and does not modify the edge", async () => {
+        const repo = makeRepo();
+        await seedEdge(repo);
+        const before = await repo.getEdge("e1");
+
+        await expect(
+          repo.updateEdgeMaturity("e1", "stable_causal", 0.9, 10, {
+            recordId: "r1",
+            timestamp: "2026-07-11T00:00:00Z",
+          })
+        ).rejects.toThrow(InvalidMaturityTransitionError);
+
+        await expect(
+          repo.updateEdgeMaturity("e1", "suspected_causal", NaN, 3, {
+            recordId: "r2",
+            timestamp: "2026-07-11T00:00:00Z",
+          })
+        ).rejects.toThrow(InvalidConfidenceError);
+
+        expect(await repo.getMaturityHistory("e1")).toEqual([]);
+        expect(await repo.getEdge("e1")).toEqual(before);
       });
     });
   });
