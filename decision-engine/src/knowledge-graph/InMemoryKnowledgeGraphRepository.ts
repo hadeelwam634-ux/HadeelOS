@@ -3,6 +3,7 @@ import { clone } from "../persistence/clone";
 import { assertValidMaturityTransition, classifyMaturityTransition } from "./CausalMaturityPolicy";
 import {
   DuplicateEdgeError,
+  DuplicateMaturityTransitionRecordError,
   DuplicateNodeError,
   InvalidConfidenceError,
   InvalidEvidenceCountError,
@@ -139,6 +140,7 @@ export class InMemoryKnowledgeGraphRepository implements KnowledgeGraphRepositor
       reason: transition.reason,
       overrideMaturityTransition: transition.overrideMaturityTransition,
     });
+    this.assertUniqueMaturityRecordId(transition.recordId);
 
     const kind = classifyMaturityTransition(existing.causalMaturity, maturity);
 
@@ -180,5 +182,21 @@ export class InMemoryKnowledgeGraphRepository implements KnowledgeGraphRepositor
   /** Returns cloned copies of every stored edge, in insertion order. */
   private edgesInOrder(): KGEdge[] {
     return this.edgeInsertionOrder.map((id) => clone(this.edges.get(id)!));
+  }
+
+  /**
+   * Enforces global uniqueness of MaturityTransitionRecord.id across
+   * every edge's history — not just the edge currently being updated —
+   * mirroring EventLogRepository's DuplicateEventLogEntryError check
+   * from PR #2 and anticipating the future kg_maturity_history primary
+   * key. Called before any mutation in updateEdgeMaturity() so a
+   * colliding id leaves the edge and history untouched.
+   */
+  private assertUniqueMaturityRecordId(id: UUID): void {
+    for (const records of this.maturityHistory.values()) {
+      if (records.some((record) => record.id === id)) {
+        throw new DuplicateMaturityTransitionRecordError(id);
+      }
+    }
   }
 }

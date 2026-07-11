@@ -68,3 +68,16 @@ export class InvalidMaturityTransitionError extends KnowledgeGraphError {
     this.name = "InvalidMaturityTransitionError";
   }
 }
+
+/**
+ * Thrown by updateEdgeMaturity() if transition.recordId is already used
+ * by an existing MaturityTransitionRecord (checked globally, across
+ * every edge's history — mirroring the future kg_maturity_history
+ * table's primary key). Checked before the edge or history is written.
+ */
+export class DuplicateMaturityTransitionRecordError extends KnowledgeGraphError {
+  constructor(id: UUID) {
+    super(`MaturityTransitionRecord with id "${id}" already exists.`);
+    this.name = "DuplicateMaturityTransitionRecordError";
+  }
+}
