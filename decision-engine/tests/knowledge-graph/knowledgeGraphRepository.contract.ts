@@ -3,6 +3,7 @@ import { KGEdge, KGNode } from "../../src/types";
 import { KnowledgeGraphRepository } from "../../src/knowledge-graph/KnowledgeGraphRepository";
 import {
   DuplicateEdgeError,
+  DuplicateMaturityTransitionRecordError,
   DuplicateNodeError,
   InvalidConfidenceError,
   InvalidEvidenceCountError,
@@ -450,6 +451,49 @@ export function runKnowledgeGraphRepositoryContractTests(
         });
         updated.confidence = 0.99;
         expect((await repo.getEdge("e1"))?.confidence).toBe(0.6);
+      });
+
+      it("rejects a transition.recordId that was already used on the same edge, and writes nothing", async () => {
+        const repo = makeRepo();
+        await seedEdge(repo);
+        await repo.updateEdgeMaturity("e1", "suspected_causal", 0.6, 3, {
+          recordId: "r1",
+          timestamp: "2026-07-11T00:00:00Z",
+        });
+        const before = await repo.getEdge("e1");
+
+        await expect(
+          repo.updateEdgeMaturity("e1", "experimentally_supported", 0.7, 4, {
+            recordId: "r1",
+            timestamp: "2026-07-11T01:00:00Z",
+          })
+        ).rejects.toThrow(DuplicateMaturityTransitionRecordError);
+
+        expect(await repo.getEdge("e1")).toEqual(before);
+        expect(await repo.getMaturityHistory("e1")).toHaveLength(1);
+      });
+
+      it("rejects a transition.recordId that collides with a record on a different edge (global uniqueness)", async () => {
+        const repo = makeRepo();
+        await seedEdge(repo);
+        await repo.addNode(makeNode({ id: "n3" }));
+        await repo.addEdge(
+          makeEdge({ id: "e2", fromNodeId: "n1", toNodeId: "n3", causalMaturity: "correlated" })
+        );
+
+        await repo.updateEdgeMaturity("e1", "suspected_causal", 0.6, 3, {
+          recordId: "shared-id",
+          timestamp: "2026-07-11T00:00:00Z",
+        });
+
+        await expect(
+          repo.updateEdgeMaturity("e2", "suspected_causal", 0.6, 3, {
+            recordId: "shared-id",
+            timestamp: "2026-07-11T01:00:00Z",
+          })
+        ).rejects.toThrow(DuplicateMaturityTransitionRecordError);
+
+        expect(await repo.getMaturityHistory("e2")).toEqual([]);
       });
     });
 
