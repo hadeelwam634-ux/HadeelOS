@@ -205,6 +205,96 @@ export interface DigitalTwin {
   version: number;
 }
 
+// ---------- Digital Twin Snapshot (PR #6) ----------
+//
+// A richer, persisted derivation of user state, distinct from the
+// lightweight `DigitalTwin` above (which only feeds recalc()'s
+// confidence calculation and predates this module). A
+// DigitalTwinSnapshot is derived by DigitalTwinService from the Signal
+// Store, Event Log, Knowledge Graph, Hypotheses, and Experiments — see
+// src/twin/ — and never stores raw signal values itself, only
+// interpreted/derived fields.
+
+export interface EnergyCurvePoint {
+  hour: number; // 0-23
+  expectedEnergy: number; // 0..1
+  confidence: number; // 0..1
+}
+
+export interface DigitalTwinSourceVersions {
+  signalsUpdatedAt: string | null;
+  eventLogCursor: string | null;
+  graphVersion: string | null;
+}
+
+export interface DigitalTwinSnapshot {
+  id: UUID;
+  userId: UUID;
+  derivedAt: string;
+
+  stress: "low" | "medium" | "high" | "unknown";
+  energyCurve: EnergyCurvePoint[];
+
+  decisionStyle: string | null;
+  behaviorPatterns: string[];
+  knownPreferences: string[];
+  activeConstraints: string[];
+
+  sourceVersions: DigitalTwinSourceVersions;
+}
+
+// ---------- Memory Governance v2 (PR #6) ----------
+//
+// A richer, persisted per-fact memory model, distinct from the
+// lightweight `MemoryGovernanceLogEntry` below (unused elsewhere in the
+// codebase, predates this module). See src/memory/.
+
+export type MemoryState = "Missing" | "Learning" | "Knows";
+
+export type MemoryRegressionReason =
+  | "evidence_decay"
+  | "stale_data"
+  | "contradiction"
+  | "user_correction"
+  | "user_forget"
+  | "experiment_opt_out"
+  | "source_disabled"
+  | "unreliable_source";
+
+export interface MemoryRecord {
+  id: UUID;
+  userId: UUID;
+  key: string;
+  state: MemoryState;
+  value: unknown;
+  confidence: number;
+  evidenceCount: number;
+  lastReinforcedAt: string;
+  blocked: boolean;
+}
+
+export type MemoryGovernanceActor = "system" | "user";
+
+export type MemoryGovernanceAction =
+  | "promote"
+  | "demote"
+  | "correct"
+  | "forget"
+  | "block_inference"
+  | "unblock_inference";
+
+/** Append-only — no update or delete method exists anywhere in this module. */
+export interface MemoryGovernanceRecord {
+  id: UUID;
+  memoryId: UUID;
+  actor: MemoryGovernanceActor;
+  action: MemoryGovernanceAction;
+  previousState: string | null;
+  nextState: string | null;
+  reason: string;
+  timestamp: string;
+}
+
 // ---------- Journal ----------
 
 export interface JournalEntry {
