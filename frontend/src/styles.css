@@ -1,0 +1,227 @@
+:root {
+  color-scheme: light dark;
+  --bg: #0b0f14;
+  --surface: #131a22;
+  --text: #eef2f6;
+  --muted: #9aa7b2;
+  --accent: #3fa9f5;
+  --danger: #e5484d;
+  --success: #30a46c;
+  --warning: #f5a623;
+  --border: #26323c;
+  --focus: #ffd60a;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Segoe UI", "Tahoma", system-ui, sans-serif;
+  line-height: 1.5;
+}
+
+[dir="rtl"] {
+  text-align: right;
+}
+
+.skip-link {
+  position: absolute;
+  top: -100px;
+  left: 0;
+  background: var(--accent);
+  color: #05131f;
+  padding: 0.5rem 1rem;
+  z-index: 100;
+}
+
+.skip-link:focus {
+  top: 0;
+}
+
+/* Always-visible, high-contrast focus ring — never removed, only
+   restyled, per PR #10's "visible focus" accessibility requirement. */
+:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.app-shell {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 1.25rem 1rem 4rem;
+}
+
+.top-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+}
+
+.app-name {
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.lang-toggle {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.4rem 0.9rem;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1rem 1.1rem;
+  margin-bottom: 1rem;
+}
+
+.card h2,
+.card h3 {
+  margin-top: 0;
+  font-size: 1rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.pill {
+  display: inline-block;
+  border-radius: 999px;
+  padding: 0.15rem 0.6rem;
+  font-size: 0.8rem;
+  background: rgba(63, 169, 245, 0.15);
+  color: var(--accent);
+}
+
+.pill.low {
+  background: rgba(229, 72, 77, 0.15);
+  color: var(--danger);
+}
+
+.pill.moderate {
+  background: rgba(245, 166, 35, 0.15);
+  color: var(--warning);
+}
+
+.pill.high,
+.pill.very_high {
+  background: rgba(48, 164, 108, 0.15);
+  color: var(--success);
+}
+
+.actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.actions button {
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  padding: 0.6rem 1rem;
+  min-height: 44px;
+}
+
+.actions button[data-variant="accept"] {
+  background: var(--success);
+  border-color: var(--success);
+  color: #05130c;
+}
+
+.actions button[data-variant="reject"] {
+  background: transparent;
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.status-banner {
+  border-radius: 10px;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+  border: 1px solid var(--border);
+}
+
+.status-banner.offline {
+  border-color: var(--danger);
+}
+
+.status-banner.stale {
+  border-color: var(--warning);
+}
+
+.list-reset {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.list-reset li {
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.list-reset li:last-child {
+  border-bottom: none;
+}
+
+.memory-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.memory-actions {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.memory-actions button {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.3rem 0.6rem;
+  font-size: 0.85rem;
+  min-height: 32px;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
