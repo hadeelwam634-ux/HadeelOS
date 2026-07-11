@@ -36,9 +36,17 @@ npm test
 - The service never returns repository internals: signal stores, forecasts, and ID lists returned from `recalculateDay()` are freshly built values, so mutating a result never mutates stored state.
 - **Not atomic (v1):** the per-decision `EventLogEntry` appends happen in a loop, one repository call per decision. If an append fails partway through, the entries already appended remain persisted — there is no rollback. Callers must not assume `recalculateDay()` is all-or-nothing. True atomicity needs a real transaction boundary and is deferred to the PostgreSQL adapter PR.
 
+## Knowledge Graph (PR #4)
+
+- `src/knowledge-graph/KnowledgeGraphRepository.ts` — storage-agnostic contract for `KGNode`/`KGEdge`: `addNode`, `getNode`, `getNodesByDomain`, `addEdge`, `getEdge`, `findEdgesFrom`, `findEdgesTo`, `findEdgesBetween`, `updateEdgeMaturity`. Node and edge IDs must be unique; an edge cannot reference a `fromNodeId`/`toNodeId` that was never added via `addNode()`; `confidence` must be in `[0, 1]`; `evidenceCount` must be `>= 0`; a self-edge (`fromNodeId === toNodeId`) is rejected unless the caller explicitly passes `{ allowSelfEdge: true }`.
+- `src/knowledge-graph/InMemoryKnowledgeGraphRepository.ts` — the initial backend, deep-cloning (via `../persistence/clone`) at every read and write boundary, exactly like the Signal Store / Event Log repositories from PR #2. IDs and timestamps are never generated inside the repository — callers supply fully-formed values (see `KnowledgeGraphService` below), including an explicit `reinforcedAt` timestamp for `updateEdgeMaturity()`, so repository behavior stays deterministic and testable without faking the system clock.
+- `src/knowledge-graph/CausalMaturityPolicy.ts` — the only place causal maturity transition legality is decided (`correlated → suspected_causal → experimentally_supported → stable_causal`). A single natural step forward is always allowed. Skipping more than one step requires `overrideMaturityTransition: true` **and** a `reason`. Any downgrade (moving to a lower maturity) requires a `reason` — there is no silent downgrade path.
+- `src/knowledge-graph/KnowledgeGraphService.ts` — thin orchestration layer with injected `IdGenerator`/`Clock` (reusing the same interfaces from `src/application/types.ts`), so it's the only place that constructs `KGNode`/`KGEdge` IDs and timestamps. Nothing outside this service should call `KnowledgeGraphRepository` directly.
+- `tests/knowledge-graph/knowledgeGraphRepository.contract.ts` — reusable behavioral test suite (`runKnowledgeGraphRepositoryContractTests`), covering duplicate IDs, missing node references, invalid confidence/evidence, the self-edge rule, every maturity-transition case (natural step, rejected skip, allowed override-with-reason, rejected silent downgrade, allowed downgrade-with-reason), defensive cloning, and insertion/query order. Any future `PostgresKnowledgeGraphRepository` test file just imports and calls this contract with its own factory.
+
 ## Status
 
-Implements the schemas, pure functions, in-memory persistence layer, and the Application Service that orchestrates them from the spec. Not yet wired to a real database (Postgres) or to the Knowledge Graph / Experiment lifecycle / Memory Governance enforcement — those are the next milestones.
+Implements the schemas, pure functions, in-memory persistence layer, the Application Service, and the Knowledge Graph persistence layer from the spec. Not yet wired to a real database (Postgres) or to the Hypothesis/Experiment lifecycle or Memory Governance enforcement — those are the next milestones.
 
 ## Design notes from review
 
