@@ -60,3 +60,28 @@ export class TodayOrchestrationError extends ApplicationError {
     this.name = "TodayOrchestrationError";
   }
 }
+
+/**
+ * Thrown by DecisionLifecycleService when a decisionId has no Event
+ * Log history at all (never proposed, or the id is simply unknown to
+ * this user's AppContainer).
+ */
+export class UnknownDecisionError extends ApplicationError {
+  constructor(decisionId: string) {
+    super(`Decision with id "${decisionId}" has no recorded history.`);
+    this.name = "UnknownDecisionError";
+  }
+}
+
+/**
+ * Thrown by DecisionLifecycleService.recordOutcome() when the decision
+ * is still in the "proposed" state — an outcome cannot be recorded
+ * before the user has responded (accepted/rejected/ignored) at least
+ * once, mirroring the Decision state machine's own ordering rules.
+ */
+export class DecisionNotYetRespondedError extends ApplicationError {
+  constructor(decisionId: string) {
+    super(`Decision "${decisionId}" has not been responded to yet; cannot record an outcome.`);
+    this.name = "DecisionNotYetRespondedError";
+  }
+}
