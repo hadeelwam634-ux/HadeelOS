@@ -5,3 +5,4 @@ export * from "./recalc";
 export * from "./persistence";
 export * from "./application";
 export * from "./knowledge-graph";
+export * from "./learning";
