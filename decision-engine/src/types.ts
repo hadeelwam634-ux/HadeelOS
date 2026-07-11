@@ -193,27 +193,22 @@ export interface Experiment {
   endedAt: string | null;
 }
 
-// ---------- Digital Twin ----------
-
-export interface DigitalTwin {
-  userId: UUID;
-  currentStress: "low" | "medium" | "high";
-  decisionStyle: "reflective" | "decisive";
-  energyCurveShape: "morning_peak" | "afternoon_peak" | "evening_peak" | "flat";
-  motivation: "low" | "medium" | "high";
-  lastComputedAt: string;
-  version: number;
-}
-
 // ---------- Digital Twin Snapshot (PR #6) ----------
 //
-// A richer, persisted derivation of user state, distinct from the
-// lightweight `DigitalTwin` above (which only feeds recalc()'s
-// confidence calculation and predates this module). A
-// DigitalTwinSnapshot is derived by DigitalTwinService from the Signal
-// Store, Event Log, Knowledge Graph, Hypotheses, and Experiments — see
-// src/twin/ — and never stores raw signal values itself, only
-// interpreted/derived fields.
+// A persisted derivation of user state. DigitalTwinSnapshot is derived
+// by DigitalTwinService from the Signal Store, Event Log, Knowledge
+// Graph, Hypotheses, and Experiments — see src/twin/ — and never
+// stores raw signal values itself, only interpreted/derived fields.
+//
+// This replaces the earlier, simpler `DigitalTwin` type that recalc()
+// and the Application Service originally depended on (from the initial
+// Decision Engine Specification v1). That type has been migrated away
+// from entirely: `RecalcInput.twin` / `RecalculateDayCommand.twin` now
+// both use DigitalTwinSnapshot, and the old interface has been removed
+// from this file since nothing referenced it anymore. Neither
+// recalc() nor DecisionApplicationService ever read any field off
+// `twin` — it was (and remains) a reserved, unused pass-through field —
+// so this was a type-only migration with no behavior change.
 
 export interface EnergyCurvePoint {
   hour: number; // 0-23
@@ -243,11 +238,10 @@ export interface DigitalTwinSnapshot {
   sourceVersions: DigitalTwinSourceVersions;
 }
 
-// ---------- Memory Governance v2 (PR #6) ----------
+// ---------- Memory Governance (PR #6) ----------
 //
-// A richer, persisted per-fact memory model, distinct from the
-// lightweight `MemoryGovernanceLogEntry` below (unused elsewhere in the
-// codebase, predates this module). See src/memory/.
+// A persisted per-fact memory model with an append-only governance
+// audit trail. See src/memory/.
 
 export type MemoryState = "Missing" | "Learning" | "Knows";
 
@@ -306,20 +300,8 @@ export interface JournalEntry {
   linkedExperimentId: UUID | null;
 }
 
-// ---------- Memory Governance ----------
-
-export type GovernanceAction =
-  | "decay"
-  | "delete"
-  | "user_correction"
-  | "user_forget"
-  | "experiment_opt_out";
-
-export interface MemoryGovernanceLogEntry {
-  id: UUID;
-  action: GovernanceAction;
-  targetId: UUID;
-  targetType: string;
-  timestamp: string;
-  actor: "system" | "user";
-}
+// The original "Memory Governance" section (GovernanceAction /
+// MemoryGovernanceLogEntry) has been removed: it predated the PR #6
+// Memory module, was never referenced anywhere outside this file, and
+// is fully superseded by MemoryGovernanceAction / MemoryGovernanceRecord
+// above.
