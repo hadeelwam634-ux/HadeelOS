@@ -52,7 +52,20 @@ export type SignalStore = Partial<Record<SignalType, SignalStoreEntry>>;
 
 // ---------- Event Log ----------
 
-export type UserAction = "accepted" | "rejected" | "ignored";
+/**
+ * "proposed" (added in PR #8) records that the system generated and
+ * presented a recommendation — including its context snapshot and
+ * alternative scenarios in `recommendation` — before the user has
+ * responded at all. It is written once per TodayDecisionApplicationService
+ * run that produces a non-null decision, with `outcome: "pending"`.
+ * Once the user actually responds (PR #9's respond endpoint), a
+ * separate "accepted"/"rejected"/"ignored" entry is appended for the
+ * same decisionId — this mirrors how a Decision can move through
+ * several EventLogEntry rows over its lifetime without ever mutating
+ * an earlier one (see the append-only guarantee documented on
+ * EventLogRepository).
+ */
+export type UserAction = "proposed" | "accepted" | "rejected" | "ignored";
 export type Outcome = "completed" | "skipped" | "partial" | "pending";
 
 export interface EventLogEntry {

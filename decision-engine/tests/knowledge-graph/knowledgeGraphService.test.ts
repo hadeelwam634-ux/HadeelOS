@@ -139,3 +139,32 @@ describe("KnowledgeGraphService", () => {
     expect(edge.fromNodeId).toBe(edge.toNodeId);
   });
 });
+
+describe("KnowledgeGraphService — PR #8 read passthroughs", () => {
+  it("getNodesByDomain returns nodes for that domain only", async () => {
+    const { service } = makeService();
+    await service.recordNode("gym_time");
+    await service.recordNode("gym_time");
+    await service.recordNode("quran_timing");
+
+    const gymNodes = await service.getNodesByDomain("gym_time");
+    expect(gymNodes).toHaveLength(2);
+    expect(gymNodes.every((n) => n.domain === "gym_time")).toBe(true);
+  });
+
+  it("findEdgesFrom / findEdgesTo return edges touching that node", async () => {
+    const { service } = makeService();
+    const a = await service.recordNode("gym_time");
+    const b = await service.recordNode("sleep");
+    const edge = await service.recordEdge({
+      fromNodeId: a.id,
+      toNodeId: b.id,
+      recordType: "Observation",
+      directionBasis: "temporal_precedence",
+    });
+
+    expect(await service.findEdgesFrom(a.id)).toEqual([edge]);
+    expect(await service.findEdgesTo(b.id)).toEqual([edge]);
+    expect(await service.findEdgesFrom(b.id)).toEqual([]);
+  });
+});

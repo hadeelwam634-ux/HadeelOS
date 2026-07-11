@@ -99,4 +99,23 @@ export class KnowledgeGraphService {
   async getEdge(edgeId: UUID): Promise<KGEdge | undefined> {
     return this.repository.getEdge(edgeId);
   }
+
+  /**
+   * Thin read passthroughs — added in PR #8 so TodayDecisionApplicationService
+   * can build a CounterfactualEngine KnowledgeGraphSnapshot (every edge
+   * relevant to a candidate decision's domain) without reaching past
+   * this service into KnowledgeGraphRepository directly, same
+   * justification as getEdge() above.
+   */
+  async getNodesByDomain(domain: string): Promise<KGNode[]> {
+    return this.repository.getNodesByDomain(domain);
+  }
+
+  async findEdgesFrom(nodeId: UUID): Promise<KGEdge[]> {
+    return this.repository.findEdgesFrom(nodeId);
+  }
+
+  async findEdgesTo(nodeId: UUID): Promise<KGEdge[]> {
+    return this.repository.findEdgesTo(nodeId);
+  }
 }

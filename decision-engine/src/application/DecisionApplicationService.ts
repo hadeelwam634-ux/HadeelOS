@@ -43,6 +43,14 @@ function nonEmptyEntries(store: SignalStore): SignalStoreEntry[] {
  * behavior needs a real transaction boundary, which only becomes
  * possible once there's a transactional backend (Postgres) — tracked
  * for a future PR. Callers must not assume this method is atomic.
+ *
+ * v2 note (PR #8): TodayDecisionApplicationService now exists
+ * alongside this class for the fuller pipeline that also decides
+ * *which* decision to propose (via the Counterfactual Engine,
+ * Digital Twin, and Knowledge Graph). This class's behavior and
+ * contract are unchanged — it is still the right tool for
+ * recalculating forecast/timeline from a set of already-accepted
+ * decisions on their own.
  */
 export class DecisionApplicationService {
   constructor(
