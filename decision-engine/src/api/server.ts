@@ -1,10 +1,11 @@
 import { randomUUID } from "crypto";
 import { IncomingMessage, ServerResponse, createServer as createHttpServer, Server } from "http";
 import { AppContainer } from "./container";
-import { AuthResolver, MockHeaderAuthResolver } from "./auth";
+import { AuthResolver, SessionTokenAuthResolver } from "./auth";
 import { HttpMethod, RequestContext, Router } from "./router";
 import { InvalidJsonBodyError, mapErrorToHttpResponse } from "./errors";
 import { healthRoute } from "./routes/system";
+import { createAuthRoutes } from "./routes/auth";
 import { getCurrentSignalsRoute, postSignalsRoute } from "./routes/signals";
 import { getTodayRoute, recalculateTodayRoute } from "./routes/today";
 import {
@@ -13,11 +14,19 @@ import {
   respondToDecisionRoute,
 } from "./routes/decisions";
 import { blockMemoryRoute, correctMemoryRoute, forgetMemoryRoute, getMemoryRoute } from "./routes/memory";
+import {
+  AuthService,
+  InMemorySessionRepository,
+  InMemoryUserRepository,
+  LoginRateLimiter,
+} from "../auth";
+import { RandomIdGenerator, SystemClock } from "../application/types";
 
-function buildRouter(): Router {
+function buildRouter(authService: AuthService): Router {
   const router = new Router();
   for (const route of [
     healthRoute,
+    ...createAuthRoutes(authService),
     postSignalsRoute,
     getCurrentSignalsRoute,
     recalculateTodayRoute,
@@ -50,9 +59,33 @@ async function readJsonBody(req: IncomingMessage): Promise<unknown> {
   }
 }
 
+/**
+ * Builds a fresh AuthService with its own (in-memory, v1) user and
+ * session repositories. One call to createApp() == one isolated user
+ * directory + session store, same lifetime as the AppContainer it's
+ * paired with — this is what lets every test file start from a clean
+ * slate just by calling createApp() again.
+ */
+function createDefaultAuthService(): AuthService {
+  return new AuthService(
+    new InMemoryUserRepository(),
+    new InMemorySessionRepository(),
+    new RandomIdGenerator(),
+    new SystemClock(),
+    new LoginRateLimiter(new SystemClock()),
+  );
+}
+
 export interface CreateAppOptions {
   container?: AppContainer;
   authResolver?: AuthResolver;
+  /**
+   * The AuthService backing register/login/logout routes. If you pass
+   * a custom `authResolver` that is NOT built from this same
+   * AuthService instance, tokens issued by /api/auth/login will not
+   * resolve — the resolver and the routes must share one AuthService.
+   */
+  authService?: AuthService;
 }
 
 /**
@@ -68,8 +101,9 @@ export interface CreateAppOptions {
  */
 export function createApp(options: CreateAppOptions = {}) {
   const container = options.container ?? new AppContainer();
-  const authResolver = options.authResolver ?? new MockHeaderAuthResolver();
-  const router = buildRouter();
+  const authService = options.authService ?? createDefaultAuthService();
+  const authResolver = options.authResolver ?? new SessionTokenAuthResolver(authService);
+  const router = buildRouter(authService);
 
   return async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const requestId = randomUUID();
@@ -82,7 +116,7 @@ export function createApp(options: CreateAppOptions = {}) {
       const { route, params } = router.match(method, url.pathname);
 
       const body = await readJsonBody(req);
-      const authContext = route.public ? null : authResolver.resolve(req.headers);
+      const authContext = route.public ? null : await authResolver.resolve(req.headers);
 
       const ctx: RequestContext = {
         requestId,

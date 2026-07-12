@@ -10,6 +10,8 @@
  * "structured errors, no stack traces to the client" rule enforced in
  * exactly one place instead of scattered across every route.
  */
+import { InvalidCredentialsError, TooManyLoginAttemptsError } from "../auth";
+
 export class ApiError extends Error {
   constructor(message: string) {
     super(message);
@@ -111,6 +113,14 @@ export function mapErrorToHttpResponse(err: unknown, requestId: string): HttpErr
 
   if (err instanceof ForbiddenError) {
     return { status: 403, body: { error: { name, message, requestId } } };
+  }
+
+  if (err instanceof InvalidCredentialsError) {
+    return { status: 401, body: { error: { name, message, requestId } } };
+  }
+
+  if (err instanceof TooManyLoginAttemptsError) {
+    return { status: 429, body: { error: { name, message, requestId } } };
   }
 
   if (err instanceof RouteNotFoundError || name.startsWith("Unknown")) {

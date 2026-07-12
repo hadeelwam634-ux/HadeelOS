@@ -1,4 +1,5 @@
 import { UUID } from "../types";
+import { AuthService } from "../auth";
 import { UnauthenticatedError } from "./errors";
 
 /**
@@ -15,25 +16,22 @@ export interface AuthContext {
 /**
  * Resolves an AuthContext from raw request headers, or null if the
  * request is unauthenticated. Deliberately an interface (not a single
- * hard-coded implementation) so PR #12's real session/token
- * authentication can replace MockHeaderAuthResolver later without
- * touching a single route handler.
+ * hard-coded implementation), and deliberately async: real session
+ * verification (SessionTokenAuthResolver, PR #12) is a repository
+ * lookup, not a synchronous header read.
  */
 export interface AuthResolver {
-  resolve(headers: Record<string, string | string[] | undefined>): AuthContext | null;
+  resolve(
+    headers: Record<string, string | string[] | undefined>,
+  ): AuthContext | null | Promise<AuthContext | null>;
 }
 
 /**
- * v1 mock auth: trusts an `x-user-id` header as-is. This is explicitly
- * NOT real authentication — there is no session, token, or password
- * involved, and it must not be used past local development / the
- * automated test suite. PR #12 ("Security baseline: authentication,
- * authorization, privacy, and audit controls") replaces this with real
- * session/token verification; every route handler already only depends
- * on the AuthResolver interface, so that swap requires no route
- * changes. Deliberately still requires *some* userId (never falls back
- * to a global/default user) so "no state sharing between users" holds
- * even in this mock form.
+ * v1 mock auth: trusts an `x-user-id` header as-is, with no session,
+ * token, or password involved. No longer wired as createApp()'s
+ * default (see server.ts) — SessionTokenAuthResolver is real auth now
+ * — but kept exported for local scripting/manual testing against a
+ * pre-existing userId without going through register/login.
  */
 export class MockHeaderAuthResolver implements AuthResolver {
   resolve(headers: Record<string, string | string[] | undefined>): AuthContext | null {
@@ -41,6 +39,29 @@ export class MockHeaderAuthResolver implements AuthResolver {
     const userId = Array.isArray(raw) ? raw[0] : raw;
     if (!userId || userId.trim().length === 0) return null;
     return { userId: userId.trim() };
+  }
+}
+
+/**
+ * Real auth (PR #12): reads `Authorization: Bearer <token>` and asks
+ * AuthService to look the token up. This is the only thing that
+ * changed to go from "trust a header" to "verify a session" — no route
+ * handler anywhere had to change, exactly as PR #9's original doc
+ * comment on this interface promised.
+ */
+export class SessionTokenAuthResolver implements AuthResolver {
+  constructor(private readonly authService: AuthService) {}
+
+  async resolve(
+    headers: Record<string, string | string[] | undefined>,
+  ): Promise<AuthContext | null> {
+    const raw = headers["authorization"];
+    const value = Array.isArray(raw) ? raw[0] : raw;
+    if (!value || !value.startsWith("Bearer ")) return null;
+    const token = value.slice("Bearer ".length).trim();
+    if (!token) return null;
+    const resolved = await this.authService.resolveSession(token);
+    return resolved;
   }
 }
 
