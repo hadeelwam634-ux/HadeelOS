@@ -9,4 +9,5 @@ export * from "./learning";
 export * from "./twin";
 export * from "./memory";
 export * from "./counterfactual";
+export * from "./auth";
 export * from "./api";
