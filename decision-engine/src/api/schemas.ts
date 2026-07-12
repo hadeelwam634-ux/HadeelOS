@@ -120,6 +120,34 @@ export const idParamSchema = z.object({
 });
 
 /**
+ * Auth baseline (PR #12) password policy: at least 10 characters, at
+ * least one letter and one digit. Deliberately not a maximum-strictness
+ * policy (no forced special characters) — length is the strongest
+ * single factor for resisting brute force, and overly strict composition
+ * rules are well-documented to push users toward predictable patterns.
+ */
+export const passwordSchema = z
+  .string()
+  .min(10, "Password must be at least 10 characters.")
+  .max(200, "Password must be at most 200 characters.")
+  .regex(/[A-Za-z]/, "Password must contain at least one letter.")
+  .regex(/[0-9]/, "Password must contain at least one digit.");
+
+export const registerBodySchema = z.object({
+  email: z.string().trim().toLowerCase().email(),
+  password: passwordSchema,
+});
+
+export const loginBodySchema = z.object({
+  email: z.string().trim().toLowerCase().email(),
+  password: z.string().min(1).max(200),
+});
+
+export const logoutBodySchema = z.object({
+  token: z.string().min(1),
+});
+
+/**
  * signalTypeSchema's z.union([z.enum(...), z.string().regex(...)]) type-checks
  * its *input* correctly, but its *inferred output type* widens to
  * plain `string` (TypeScript has no way to encode "this string, once
