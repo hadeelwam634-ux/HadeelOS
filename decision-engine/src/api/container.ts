@@ -15,6 +15,12 @@ import { InMemoryKnowledgeGraphRepository } from "../knowledge-graph/InMemoryKno
 import { KnowledgeGraphService } from "../knowledge-graph/KnowledgeGraphService";
 import { InMemoryHypothesisRepository } from "../learning/InMemoryHypothesisRepository";
 import { HypothesisService } from "../learning/HypothesisService";
+import {
+  CalendarSignalService,
+  CalendarProvider,
+  InMemoryCalendarConnectionRepository,
+  FakeCalendarProvider,
+} from "../calendar";
 
 /**
  * Everything one authenticated user's requests are allowed to touch.
@@ -46,6 +52,7 @@ export interface UserServices {
   readonly memoryGovernanceService: MemoryGovernanceService;
   readonly knowledgeGraphService: KnowledgeGraphService;
   readonly hypothesisService: HypothesisService;
+  readonly calendarSignalService: CalendarSignalService;
   /**
    * The most recent TodayDecisionResult produced by POST
    * /api/today/recalculate for this user, so GET /api/today has
@@ -56,19 +63,32 @@ export interface UserServices {
   lastToday: TodayDecisionResult | null;
 }
 
-function buildUserServices(userId: UUID, idGenerator: IdGenerator, clock: Clock): UserServices {
+function buildUserServices(
+  userId: UUID,
+  idGenerator: IdGenerator,
+  clock: Clock,
+  calendarProvider: CalendarProvider,
+): UserServices {
   const signalStoreRepository = new InMemorySignalStoreRepository();
   const eventLogRepository = new InMemoryEventLogRepository();
   const digitalTwinRepository = new InMemoryDigitalTwinRepository();
   const memoryRepository = new InMemoryMemoryRepository();
   const knowledgeGraphRepository = new InMemoryKnowledgeGraphRepository();
   const hypothesisRepository = new InMemoryHypothesisRepository();
+  const calendarConnectionRepository = new InMemoryCalendarConnectionRepository();
 
   const digitalTwinService = new DigitalTwinService(digitalTwinRepository, idGenerator, clock);
   const memoryMapService = new MemoryMapService(memoryRepository);
   const memoryGovernanceService = new MemoryGovernanceService(memoryRepository, idGenerator, clock);
   const knowledgeGraphService = new KnowledgeGraphService(knowledgeGraphRepository, idGenerator, clock);
   const hypothesisService = new HypothesisService(hypothesisRepository, idGenerator);
+  const signalIngestionServiceForCalendar = new SignalIngestionService(signalStoreRepository);
+  const calendarSignalService = new CalendarSignalService(
+    calendarConnectionRepository,
+    calendarProvider,
+    signalIngestionServiceForCalendar,
+    clock,
+  );
 
   return {
     userId,
@@ -97,6 +117,7 @@ function buildUserServices(userId: UUID, idGenerator: IdGenerator, clock: Clock)
     memoryGovernanceService,
     knowledgeGraphService,
     hypothesisService,
+    calendarSignalService,
     lastToday: null,
   };
 }
@@ -113,13 +134,27 @@ export class AppContainer {
 
   constructor(
     private readonly idGeneratorFactory: () => IdGenerator = () => new RandomIdGenerator(),
-    private readonly clockFactory: () => Clock = () => new SystemClock()
+    private readonly clockFactory: () => Clock = () => new SystemClock(),
+    /**
+     * A single CalendarProvider shared across every user's container
+     * (unlike the repositories above, which are deliberately fresh per
+     * user) — it holds no per-user state itself, only knows how to make
+     * API calls given whatever CalendarConnection it is passed. Tests
+     * inject a FakeCalendarProvider here; real usage should inject a
+     * GoogleCalendarProvider built from real OAuth client credentials.
+     */
+    private readonly calendarProvider: CalendarProvider = new FakeCalendarProvider(),
   ) {}
 
   forUser(userId: UUID): UserServices {
     let services = this.perUser.get(userId);
     if (services === undefined) {
-      services = buildUserServices(userId, this.idGeneratorFactory(), this.clockFactory());
+      services = buildUserServices(
+        userId,
+        this.idGeneratorFactory(),
+        this.clockFactory(),
+        this.calendarProvider,
+      );
       this.perUser.set(userId, services);
     }
     return services;

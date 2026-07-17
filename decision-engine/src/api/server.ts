@@ -15,6 +15,12 @@ import {
 } from "./routes/decisions";
 import { blockMemoryRoute, correctMemoryRoute, forgetMemoryRoute, getMemoryRoute } from "./routes/memory";
 import {
+  connectCalendarRoute,
+  disconnectCalendarRoute,
+  getCalendarConnectionRoute,
+  syncCalendarRoute,
+} from "./routes/calendar";
+import {
   AuthService,
   InMemorySessionRepository,
   InMemoryUserRepository,
@@ -38,6 +44,10 @@ function buildRouter(authService: AuthService): Router {
     correctMemoryRoute,
     forgetMemoryRoute,
     blockMemoryRoute,
+    connectCalendarRoute,
+    getCalendarConnectionRoute,
+    disconnectCalendarRoute,
+    syncCalendarRoute,
   ]) {
     router.add(route);
   }
