@@ -4,7 +4,7 @@ import { AppContainer } from "./container";
 import { AuthResolver, SessionTokenAuthResolver } from "./auth";
 import { HttpMethod, RequestContext, Router } from "./router";
 import { InvalidJsonBodyError, mapErrorToHttpResponse } from "./errors";
-import { healthRoute } from "./routes/system";
+import { createHealthRoute, createMetricsRoute } from "./routes/system";
 import { createAuthRoutes } from "./routes/auth";
 import { getCurrentSignalsRoute, postSignalsRoute } from "./routes/signals";
 import { getTodayRoute, recalculateTodayRoute } from "./routes/today";
@@ -33,11 +33,18 @@ import {
   LoginRateLimiter,
 } from "../auth";
 import { RandomIdGenerator, SystemClock } from "../application/types";
+import {
+  InMemoryMetricsCollector,
+  Logger,
+  MetricsCollector,
+  NullLogger,
+} from "../observability";
 
-function buildRouter(authService: AuthService): Router {
+function buildRouter(authService: AuthService, metricsCollector: MetricsCollector, startedAt: number): Router {
   const router = new Router();
   for (const route of [
-    healthRoute,
+    createHealthRoute(startedAt),
+    createMetricsRoute(metricsCollector),
     ...createAuthRoutes(authService),
     postSignalsRoute,
     getCurrentSignalsRoute,
@@ -106,6 +113,19 @@ export interface CreateAppOptions {
    * resolve — the resolver and the routes must share one AuthService.
    */
   authService?: AuthService;
+  /**
+   * Structured request logger (PR #15). Defaults to NullLogger so
+   * tests stay silent by default; real usage should pass a
+   * ConsoleLogger (or any other Logger implementation).
+   */
+  logger?: Logger;
+  /**
+   * Records per-request method/path/status/duration so
+   * GET /api/system/metrics has something to report. Defaults to a
+   * fresh InMemoryMetricsCollector per createApp() call, same lifetime
+   * as the AppContainer/AuthService it's paired with.
+   */
+  metricsCollector?: MetricsCollector;
 }
 
 /**
@@ -123,16 +143,40 @@ export function createApp(options: CreateAppOptions = {}) {
   const container = options.container ?? new AppContainer();
   const authService = options.authService ?? createDefaultAuthService();
   const authResolver = options.authResolver ?? new SessionTokenAuthResolver(authService);
-  const router = buildRouter(authService);
+  const logger = options.logger ?? new NullLogger();
+  const metricsCollector = options.metricsCollector ?? new InMemoryMetricsCollector();
+  const startedAt = Date.now();
+  const router = buildRouter(authService, metricsCollector, startedAt);
 
   return async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const requestId = randomUUID();
+    const requestStartedAt = Date.now();
     res.setHeader("x-request-id", requestId);
     res.setHeader("content-type", "application/json");
 
+    const url = new URL(req.url ?? "/", "http://localhost");
+    const method = (req.method ?? "GET").toUpperCase() as HttpMethod;
+
+    // Finalizes the response, then records the observability side
+    // effects (metrics + structured log) exactly once per request,
+    // regardless of which branch below produced the status — this is
+    // the single seam PR #15 adds to the request lifecycle; no route
+    // handler needs to know observability exists.
+    const finish = (status: number, body: unknown): void => {
+      res.statusCode = status;
+      res.end(JSON.stringify(body));
+      const durationMs = Date.now() - requestStartedAt;
+      metricsCollector.record({ method, path: url.pathname, status, durationMs });
+      logger.log(status >= 500 ? "error" : "info", "http_request", {
+        requestId,
+        method,
+        path: url.pathname,
+        status,
+        durationMs,
+      });
+    };
+
     try {
-      const url = new URL(req.url ?? "/", "http://localhost");
-      const method = (req.method ?? "GET").toUpperCase() as HttpMethod;
       const { route, params } = router.match(method, url.pathname);
 
       const body = await readJsonBody(req);
@@ -147,12 +191,10 @@ export function createApp(options: CreateAppOptions = {}) {
       };
 
       const result = await route.handler(ctx, container);
-      res.statusCode = result.status;
-      res.end(JSON.stringify(result.body));
+      finish(result.status, result.body);
     } catch (err) {
       const mapped = mapErrorToHttpResponse(err, requestId);
-      res.statusCode = mapped.status;
-      res.end(JSON.stringify(mapped.body));
+      finish(mapped.status, mapped.body);
     }
   };
 }
