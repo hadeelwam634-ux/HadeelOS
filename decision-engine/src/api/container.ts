@@ -21,6 +21,12 @@ import {
   InMemoryCalendarConnectionRepository,
   FakeCalendarProvider,
 } from "../calendar";
+import {
+  GmailSignalService,
+  GmailProvider,
+  InMemoryGmailConnectionRepository,
+  FakeGmailProvider,
+} from "../gmail";
 
 /**
  * Everything one authenticated user's requests are allowed to touch.
@@ -53,6 +59,7 @@ export interface UserServices {
   readonly knowledgeGraphService: KnowledgeGraphService;
   readonly hypothesisService: HypothesisService;
   readonly calendarSignalService: CalendarSignalService;
+  readonly gmailSignalService: GmailSignalService;
   /**
    * The most recent TodayDecisionResult produced by POST
    * /api/today/recalculate for this user, so GET /api/today has
@@ -68,6 +75,7 @@ function buildUserServices(
   idGenerator: IdGenerator,
   clock: Clock,
   calendarProvider: CalendarProvider,
+  gmailProvider: GmailProvider,
 ): UserServices {
   const signalStoreRepository = new InMemorySignalStoreRepository();
   const eventLogRepository = new InMemoryEventLogRepository();
@@ -76,6 +84,7 @@ function buildUserServices(
   const knowledgeGraphRepository = new InMemoryKnowledgeGraphRepository();
   const hypothesisRepository = new InMemoryHypothesisRepository();
   const calendarConnectionRepository = new InMemoryCalendarConnectionRepository();
+  const gmailConnectionRepository = new InMemoryGmailConnectionRepository();
 
   const digitalTwinService = new DigitalTwinService(digitalTwinRepository, idGenerator, clock);
   const memoryMapService = new MemoryMapService(memoryRepository);
@@ -87,6 +96,13 @@ function buildUserServices(
     calendarConnectionRepository,
     calendarProvider,
     signalIngestionServiceForCalendar,
+    clock,
+  );
+  const signalIngestionServiceForGmail = new SignalIngestionService(signalStoreRepository);
+  const gmailSignalService = new GmailSignalService(
+    gmailConnectionRepository,
+    gmailProvider,
+    signalIngestionServiceForGmail,
     clock,
   );
 
@@ -118,6 +134,7 @@ function buildUserServices(
     knowledgeGraphService,
     hypothesisService,
     calendarSignalService,
+    gmailSignalService,
     lastToday: null,
   };
 }
@@ -144,6 +161,13 @@ export class AppContainer {
      * GoogleCalendarProvider built from real OAuth client credentials.
      */
     private readonly calendarProvider: CalendarProvider = new FakeCalendarProvider(),
+    /**
+     * A single GmailProvider shared across every user's container,
+     * same rationale as calendarProvider above. Defaults to
+     * FakeGmailProvider; real usage should inject a GoogleGmailProvider
+     * built from real OAuth client credentials.
+     */
+    private readonly gmailProvider: GmailProvider = new FakeGmailProvider(),
   ) {}
 
   forUser(userId: UUID): UserServices {
@@ -154,6 +178,7 @@ export class AppContainer {
         this.idGeneratorFactory(),
         this.clockFactory(),
         this.calendarProvider,
+        this.gmailProvider,
       );
       this.perUser.set(userId, services);
     }
