@@ -11,4 +11,5 @@ export * from "./memory";
 export * from "./counterfactual";
 export * from "./auth";
 export * from "./calendar";
+export * from "./gmail";
 export * from "./api";
