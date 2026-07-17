@@ -11,6 +11,7 @@
  * exactly one place instead of scattered across every route.
  */
 import { InvalidCredentialsError, TooManyLoginAttemptsError } from "../auth";
+import { CalendarProviderError } from "../calendar";
 
 export class ApiError extends Error {
   constructor(message: string) {
@@ -121,6 +122,10 @@ export function mapErrorToHttpResponse(err: unknown, requestId: string): HttpErr
 
   if (err instanceof TooManyLoginAttemptsError) {
     return { status: 429, body: { error: { name, message, requestId } } };
+  }
+
+  if (err instanceof CalendarProviderError) {
+    return { status: 502, body: { error: { name, message, requestId } } };
   }
 
   if (err instanceof RouteNotFoundError || name.startsWith("Unknown")) {

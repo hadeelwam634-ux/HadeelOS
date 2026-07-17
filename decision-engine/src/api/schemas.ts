@@ -143,6 +143,19 @@ export const loginBodySchema = z.object({
   password: z.string().min(1).max(200),
 });
 
+/**
+ * Calendar Integration (PR #13) v1 connect body. The client completes
+ * Google's OAuth consent flow itself and hands us the resulting token
+ * pair — this endpoint never brokers or initiates the OAuth exchange
+ * (documented v1 scope limitation, see README).
+ */
+export const connectCalendarBodySchema = z.object({
+  calendarId: z.string().min(1),
+  accessToken: z.string().min(1),
+  refreshToken: z.string().min(1).nullable(),
+  expiresAt: z.string().min(1),
+});
+
 export const logoutBodySchema = z.object({
   token: z.string().min(1),
 });
