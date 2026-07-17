@@ -21,6 +21,12 @@ import {
   syncCalendarRoute,
 } from "./routes/calendar";
 import {
+  connectGmailRoute,
+  disconnectGmailRoute,
+  getGmailConnectionRoute,
+  syncGmailRoute,
+} from "./routes/gmail";
+import {
   AuthService,
   InMemorySessionRepository,
   InMemoryUserRepository,
@@ -48,6 +54,10 @@ function buildRouter(authService: AuthService): Router {
     getCalendarConnectionRoute,
     disconnectCalendarRoute,
     syncCalendarRoute,
+    connectGmailRoute,
+    getGmailConnectionRoute,
+    disconnectGmailRoute,
+    syncGmailRoute,
   ]) {
     router.add(route);
   }

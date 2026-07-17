@@ -156,6 +156,17 @@ export const connectCalendarBodySchema = z.object({
   expiresAt: z.string().min(1),
 });
 
+/**
+ * Gmail Integration (PR #14) v1 connect body — same OAuth-handoff
+ * shape as connectCalendarBodySchema, minus calendarId (Gmail has no
+ * equivalent concept; it always reads the user's own primary mailbox).
+ */
+export const connectGmailBodySchema = z.object({
+  accessToken: z.string().min(1),
+  refreshToken: z.string().min(1).nullable(),
+  expiresAt: z.string().min(1),
+});
+
 export const logoutBodySchema = z.object({
   token: z.string().min(1),
 });
