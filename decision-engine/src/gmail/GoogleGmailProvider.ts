@@ -1,3 +1,5 @@
+import { SystemClock } from "../application/types";
+import { CircuitBreaker, withRetry, RetryOptions } from "../observability";
 import { GmailProviderError } from "./errors";
 import type { GmailProvider } from "./GmailProvider";
 import type { GmailConnection } from "./types";
@@ -10,6 +12,8 @@ interface GoogleTokenResponse {
   access_token: string;
   expires_in: number;
 }
+
+const DEFAULT_RETRY_OPTIONS: RetryOptions = { maxAttempts: 3, baseDelayMs: 100 };
 
 /**
  * Real production implementation, calling the Gmail API v1 directly
@@ -24,15 +28,50 @@ interface GoogleTokenResponse {
  * (which at least sees event titles before discarding them): here,
  * the provider itself is structurally incapable of seeing message
  * content, not just disciplined about discarding it.
+ *
+ * Reliability (PR #15): every call to Google is wrapped in withRetry
+ * inside a CircuitBreaker, identical pattern to GoogleCalendarProvider.
  */
 export class GoogleGmailProvider implements GmailProvider {
+  private readonly circuitBreaker: CircuitBreaker;
+  private readonly retryOptions: RetryOptions;
+
   constructor(
     private readonly clientId: string,
     private readonly clientSecret: string,
     private readonly fetchImpl: typeof fetch = fetch,
-  ) {}
+    circuitBreaker?: CircuitBreaker,
+    retryOptions: RetryOptions = DEFAULT_RETRY_OPTIONS,
+  ) {
+    this.circuitBreaker =
+      circuitBreaker ??
+      new CircuitBreaker({
+        name: "google-gmail",
+        failureThreshold: 5,
+        cooldownMs: 30_000,
+        clock: new SystemClock(),
+      });
+    this.retryOptions = retryOptions;
+  }
 
   async countUnread(connection: GmailConnection): Promise<number> {
+    return this.circuitBreaker.execute(() =>
+      withRetry(() => this.fetchUnreadCount(connection), this.retryOptions),
+    );
+  }
+
+  async refreshAccessToken(
+    connection: GmailConnection,
+  ): Promise<{ accessToken: string; expiresAt: string } | null> {
+    if (connection.refreshToken === null) {
+      return null;
+    }
+    return this.circuitBreaker.execute(() =>
+      withRetry(() => this.fetchRefreshedToken(connection), this.retryOptions),
+    );
+  }
+
+  private async fetchUnreadCount(connection: GmailConnection): Promise<number> {
     const url = new URL("https://gmail.googleapis.com/gmail/v1/users/me/messages");
     url.searchParams.set("q", "is:unread in:inbox");
     url.searchParams.set("maxResults", "1");
@@ -60,13 +99,9 @@ export class GoogleGmailProvider implements GmailProvider {
     return payload.resultSizeEstimate ?? 0;
   }
 
-  async refreshAccessToken(
+  private async fetchRefreshedToken(
     connection: GmailConnection,
-  ): Promise<{ accessToken: string; expiresAt: string } | null> {
-    if (connection.refreshToken === null) {
-      return null;
-    }
-
+  ): Promise<{ accessToken: string; expiresAt: string }> {
     let response: Response;
     try {
       response = await this.fetchImpl("https://oauth2.googleapis.com/token", {
@@ -75,7 +110,7 @@ export class GoogleGmailProvider implements GmailProvider {
         body: new URLSearchParams({
           client_id: this.clientId,
           client_secret: this.clientSecret,
-          refresh_token: connection.refreshToken,
+          refresh_token: connection.refreshToken ?? "",
           grant_type: "refresh_token",
         }).toString(),
       });
