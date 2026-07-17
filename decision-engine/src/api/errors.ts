@@ -13,6 +13,7 @@
 import { InvalidCredentialsError, TooManyLoginAttemptsError } from "../auth";
 import { CalendarProviderError } from "../calendar";
 import { GmailProviderError } from "../gmail";
+import { CircuitOpenError } from "../observability";
 
 export class ApiError extends Error {
   constructor(message: string) {
@@ -130,6 +131,10 @@ export function mapErrorToHttpResponse(err: unknown, requestId: string): HttpErr
   }
 
   if (err instanceof GmailProviderError) {
+    return { status: 502, body: { error: { name, message, requestId } } };
+  }
+
+  if (err instanceof CircuitOpenError) {
     return { status: 502, body: { error: { name, message, requestId } } };
   }
 

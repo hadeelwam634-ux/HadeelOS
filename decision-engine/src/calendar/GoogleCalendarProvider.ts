@@ -1,3 +1,5 @@
+import { SystemClock } from "../application/types";
+import { CircuitBreaker, withRetry, RetryOptions } from "../observability";
 import { CalendarProviderError } from "./errors";
 import type { CalendarProvider } from "./CalendarProvider";
 import type { CalendarConnection, CalendarEvent } from "./types";
@@ -17,6 +19,8 @@ interface GoogleTokenResponse {
   expires_in: number;
 }
 
+const DEFAULT_RETRY_OPTIONS: RetryOptions = { maxAttempts: 3, baseDelayMs: 100 };
+
 /**
  * Real production implementation, calling Google's Calendar API v3
  * directly via the platform `fetch` (no new HTTP-client dependency,
@@ -27,15 +31,56 @@ interface GoogleTokenResponse {
  * v1 scope: this class only ever performs GET requests against the
  * events endpoint and a token-refresh POST — no write scope is ever
  * requested or used.
+ *
+ * Reliability (PR #15): every call to Google is wrapped in withRetry
+ * (exponential backoff, transient-failure tolerant) inside a
+ * CircuitBreaker (fails fast once Google is sustained-down, instead of
+ * every request from every user separately retrying and timing out).
  */
 export class GoogleCalendarProvider implements CalendarProvider {
+  private readonly circuitBreaker: CircuitBreaker;
+  private readonly retryOptions: RetryOptions;
+
   constructor(
     private readonly clientId: string,
     private readonly clientSecret: string,
     private readonly fetchImpl: typeof fetch = fetch,
-  ) {}
+    circuitBreaker?: CircuitBreaker,
+    retryOptions: RetryOptions = DEFAULT_RETRY_OPTIONS,
+  ) {
+    this.circuitBreaker =
+      circuitBreaker ??
+      new CircuitBreaker({
+        name: "google-calendar",
+        failureThreshold: 5,
+        cooldownMs: 30_000,
+        clock: new SystemClock(),
+      });
+    this.retryOptions = retryOptions;
+  }
 
   async listUpcomingEvents(
+    connection: CalendarConnection,
+    windowStart: Date,
+    windowEnd: Date,
+  ): Promise<CalendarEvent[]> {
+    return this.circuitBreaker.execute(() =>
+      withRetry(() => this.fetchUpcomingEvents(connection, windowStart, windowEnd), this.retryOptions),
+    );
+  }
+
+  async refreshAccessToken(
+    connection: CalendarConnection,
+  ): Promise<{ accessToken: string; expiresAt: string } | null> {
+    if (connection.refreshToken === null) {
+      return null;
+    }
+    return this.circuitBreaker.execute(() =>
+      withRetry(() => this.fetchRefreshedToken(connection), this.retryOptions),
+    );
+  }
+
+  private async fetchUpcomingEvents(
     connection: CalendarConnection,
     windowStart: Date,
     windowEnd: Date,
@@ -75,13 +120,9 @@ export class GoogleCalendarProvider implements CalendarProvider {
       .map((item) => this.toCalendarEvent(item));
   }
 
-  async refreshAccessToken(
+  private async fetchRefreshedToken(
     connection: CalendarConnection,
-  ): Promise<{ accessToken: string; expiresAt: string } | null> {
-    if (connection.refreshToken === null) {
-      return null;
-    }
-
+  ): Promise<{ accessToken: string; expiresAt: string }> {
     let response: Response;
     try {
       response = await this.fetchImpl("https://oauth2.googleapis.com/token", {
@@ -90,7 +131,7 @@ export class GoogleCalendarProvider implements CalendarProvider {
         body: new URLSearchParams({
           client_id: this.clientId,
           client_secret: this.clientSecret,
-          refresh_token: connection.refreshToken,
+          refresh_token: connection.refreshToken ?? "",
           grant_type: "refresh_token",
         }).toString(),
       });
