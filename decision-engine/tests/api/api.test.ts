@@ -47,7 +47,8 @@ describe("API layer v1 — health", () => {
     const app = createApp();
     const res = await request(app).get("/api/system/health");
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ status: "ok" });
+    expect(res.body.status).toBe("ok");
+    expect(typeof res.body.uptimeSeconds).toBe("number");
   });
 });
 
