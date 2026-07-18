@@ -1,4 +1,13 @@
-import type { ApiErrorBody, EventLogEntry, MemoryRecord, TodayDecisionResult } from "./types";
+import type {
+  ApiErrorBody,
+  EventLogEntry,
+  LoginResult,
+  MemoryRecord,
+  PublicCalendarConnection,
+  PublicGmailConnection,
+  RegisterResult,
+  TodayDecisionResult,
+} from "./types";
 
 /**
  * ApiClientError carries the parsed structured error body (PR #9's
@@ -24,24 +33,36 @@ export class ApiClientError extends Error {
 
 export interface ApiClientOptions {
   baseUrl?: string;
-  userId: string;
+  /**
+   * MVP Hardening: the frontend now authenticates with a real session
+   * token (`Authorization: Bearer <token>`, resolved by
+   * SessionTokenAuthResolver — see decision-engine/src/api/auth.ts)
+   * instead of the pre-PR-12 `x-user-id` mock-auth header, which the
+   * real backend no longer accepts by default. token may be null before
+   * login/registration completes; every request made without one will
+   * 401, which callers surface as ApiClientError.
+   */
+  token: string | null;
 }
 
 /**
- * Thin fetch wrapper around the PR #9 API. Every call attaches
- * `x-user-id` (the same v1 mock-auth header the API's
- * MockHeaderAuthResolver expects) and normalizes both network failures
- * and structured API error responses into ApiClientError, so calling
- * code (useTodayCockpit) never has to branch on fetch's own error
- * shapes directly.
+ * Thin fetch wrapper around the PR #9 API, updated for real sessions
+ * (MVP Hardening): every call attaches `Authorization: Bearer <token>`
+ * when a token is set, and normalizes both network failures and
+ * structured API error responses into ApiClientError, so calling code
+ * never has to branch on fetch's own error shapes directly.
  */
 export class ApiClient {
   private readonly baseUrl: string;
-  private readonly userId: string;
+  private token: string | null;
 
   constructor(options: ApiClientOptions) {
     this.baseUrl = options.baseUrl ?? "/api";
-    this.userId = options.userId;
+    this.token = options.token;
+  }
+
+  setToken(token: string | null): void {
+    this.token = token;
   }
 
   private async request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -51,7 +72,7 @@ export class ApiClient {
         ...init,
         headers: {
           "content-type": "application/json",
-          "x-user-id": this.userId,
+          ...(this.token ? { authorization: `Bearer ${this.token}` } : {}),
           ...(init?.headers ?? {}),
         },
       });
@@ -133,5 +154,72 @@ export class ApiClient {
 
   health(): Promise<{ status: string }> {
     return this.request("/system/health");
+  }
+
+  // ---------- Auth ----------
+
+  register(email: string, password: string): Promise<RegisterResult> {
+    return this.request("/auth/register", { method: "POST", body: JSON.stringify({ email, password }) });
+  }
+
+  login(email: string, password: string): Promise<LoginResult> {
+    return this.request("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) });
+  }
+
+  logout(token: string): Promise<{ loggedOut: boolean }> {
+    return this.request("/auth/logout", { method: "POST", body: JSON.stringify({ token }) });
+  }
+
+  // ---------- Calendar / Gmail connections (mock provider in this build) ----------
+
+  getCalendarConnection(): Promise<{ connection: PublicCalendarConnection | null }> {
+    return this.request("/calendar/connection");
+  }
+
+  /**
+   * v1/MVP Hardening scope: connects using a self-issued fake token
+   * pair rather than a real Google OAuth flow — the backend's
+   * FakeCalendarProvider (default in AppContainer when no real
+   * GoogleCalendarProvider is wired) never actually calls Google, so a
+   * fake token pair is sufficient and matches Hadeel's own "connect via
+   * a mock provider" E2E requirement. A real Google connect flow would
+   * instead redirect to Google and call POST /api/calendar/oauth/exchange
+   * with the resulting authorization code (see security/googleOAuth.ts)
+   * — deliberately out of scope for this button.
+   */
+  connectCalendarMock(): Promise<{ connection: PublicCalendarConnection | null }> {
+    return this.request("/calendar/connect", {
+      method: "POST",
+      body: JSON.stringify({
+        calendarId: "primary",
+        accessToken: `mock-access-${crypto.randomUUID()}`,
+        refreshToken: `mock-refresh-${crypto.randomUUID()}`,
+        expiresAt: new Date(Date.now() + 3600_000).toISOString(),
+      }),
+    });
+  }
+
+  disconnectCalendar(): Promise<{ disconnected: boolean }> {
+    return this.request("/calendar/connection", { method: "DELETE" });
+  }
+
+  getGmailConnection(): Promise<{ connection: PublicGmailConnection | null }> {
+    return this.request("/gmail/connection");
+  }
+
+  /** Same mock-provider rationale as connectCalendarMock() above. */
+  connectGmailMock(): Promise<{ connection: PublicGmailConnection | null }> {
+    return this.request("/gmail/connect", {
+      method: "POST",
+      body: JSON.stringify({
+        accessToken: `mock-access-${crypto.randomUUID()}`,
+        refreshToken: `mock-refresh-${crypto.randomUUID()}`,
+        expiresAt: new Date(Date.now() + 3600_000).toISOString(),
+      }),
+    });
+  }
+
+  disconnectGmail(): Promise<{ disconnected: boolean }> {
+    return this.request("/gmail/connection", { method: "DELETE" });
   }
 }
