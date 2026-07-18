@@ -14,6 +14,7 @@ import { InvalidCredentialsError, TooManyLoginAttemptsError } from "../auth";
 import { CalendarProviderError } from "../calendar";
 import { GmailProviderError } from "../gmail";
 import { CircuitOpenError } from "../observability";
+import { OAuthExchangeError, RateLimitExceededError } from "../security";
 
 export class ApiError extends Error {
   constructor(message: string) {
@@ -136,6 +137,14 @@ export function mapErrorToHttpResponse(err: unknown, requestId: string): HttpErr
 
   if (err instanceof CircuitOpenError) {
     return { status: 502, body: { error: { name, message, requestId } } };
+  }
+
+  if (err instanceof OAuthExchangeError) {
+    return { status: 502, body: { error: { name, message, requestId } } };
+  }
+
+  if (err instanceof RateLimitExceededError) {
+    return { status: 429, body: { error: { name, message, requestId } } };
   }
 
   if (err instanceof RouteNotFoundError || name.startsWith("Unknown")) {

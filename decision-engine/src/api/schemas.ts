@@ -167,6 +167,23 @@ export const connectGmailBodySchema = z.object({
   expiresAt: z.string().min(1),
 });
 
+/**
+ * MVP Hardening: the recommended production path — the frontend hands
+ * over only the short-lived, single-use authorization `code` from
+ * Google's OAuth redirect, never a live access/refresh token pair. See
+ * security/googleOAuth.ts.
+ */
+export const exchangeCalendarOAuthBodySchema = z.object({
+  code: z.string().min(1),
+  redirectUri: z.string().min(1),
+  calendarId: z.string().min(1),
+});
+
+export const exchangeGmailOAuthBodySchema = z.object({
+  code: z.string().min(1),
+  redirectUri: z.string().min(1),
+});
+
 export const logoutBodySchema = z.object({
   token: z.string().min(1),
 });

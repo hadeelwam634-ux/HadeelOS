@@ -17,12 +17,14 @@ import { blockMemoryRoute, correctMemoryRoute, forgetMemoryRoute, getMemoryRoute
 import {
   connectCalendarRoute,
   disconnectCalendarRoute,
+  exchangeCalendarOAuthCodeRoute,
   getCalendarConnectionRoute,
   syncCalendarRoute,
 } from "./routes/calendar";
 import {
   connectGmailRoute,
   disconnectGmailRoute,
+  exchangeGmailOAuthCodeRoute,
   getGmailConnectionRoute,
   syncGmailRoute,
 } from "./routes/gmail";
@@ -30,8 +32,13 @@ import {
   AuthService,
   InMemorySessionRepository,
   InMemoryUserRepository,
+  PostgresSessionRepository,
+  PostgresUserRepository,
   LoginRateLimiter,
 } from "../auth";
+import { getSharedPostgresPool } from "../persistence/postgres/StorageBackend";
+import { RequestRateLimiter } from "../security/RequestRateLimiter";
+import { createStaticFileHandler } from "../staticFiles";
 import { RandomIdGenerator, SystemClock } from "../application/types";
 import {
   InMemoryMetricsCollector,
@@ -58,10 +65,12 @@ function buildRouter(authService: AuthService, metricsCollector: MetricsCollecto
     forgetMemoryRoute,
     blockMemoryRoute,
     connectCalendarRoute,
+    exchangeCalendarOAuthCodeRoute,
     getCalendarConnectionRoute,
     disconnectCalendarRoute,
     syncCalendarRoute,
     connectGmailRoute,
+    exchangeGmailOAuthCodeRoute,
     getGmailConnectionRoute,
     disconnectGmailRoute,
     syncGmailRoute,
@@ -87,13 +96,28 @@ async function readJsonBody(req: IncomingMessage): Promise<unknown> {
 }
 
 /**
- * Builds a fresh AuthService with its own (in-memory, v1) user and
- * session repositories. One call to createApp() == one isolated user
- * directory + session store, same lifetime as the AppContainer it's
- * paired with — this is what lets every test file start from a clean
- * slate just by calling createApp() again.
+ * Builds a fresh AuthService. MVP Hardening: if DATABASE_URL is set,
+ * users and sessions are Postgres-backed by default (surviving process
+ * restarts — see tests/persistence/postgres/restart.test.ts); otherwise
+ * this falls back to in-memory repositories, same as AppContainer's own
+ * defaultStorageBackend() fallback, for local dev and the test suite
+ * only. One call to createApp() with no explicit authService/container
+ * options still gives every test file an isolated user directory +
+ * session store when DATABASE_URL is unset, exactly as before this
+ * change — no existing test needed to change.
  */
 function createDefaultAuthService(): AuthService {
+  const connectionString = process.env.DATABASE_URL;
+  if (connectionString) {
+    const pool = getSharedPostgresPool({ connectionString });
+    return new AuthService(
+      new PostgresUserRepository(pool),
+      new PostgresSessionRepository(pool),
+      new RandomIdGenerator(),
+      new SystemClock(),
+      new LoginRateLimiter(new SystemClock()),
+    );
+  }
   return new AuthService(
     new InMemoryUserRepository(),
     new InMemorySessionRepository(),
@@ -126,6 +150,24 @@ export interface CreateAppOptions {
    * as the AppContainer/AuthService it's paired with.
    */
   metricsCollector?: MetricsCollector;
+  /**
+   * Global per-IP request budget (MVP Hardening security review item:
+   * rate limiting beyond login). Defaults to a fresh, generous
+   * RequestRateLimiter (300 requests / 60s per IP) per createApp()
+   * call — generous enough that no existing test or a single real
+   * browser session trips it, strict enough to blunt naive scripted
+   * abuse. Pass a stricter instance (or a shared one across
+   * createApp() calls) for production tuning.
+   */
+  rateLimiter?: RequestRateLimiter;
+  /**
+   * Absolute path to a built frontend (e.g. frontend/dist) to serve
+   * alongside the API from this same process — see staticFiles.ts and
+   * README "Deployment". Defaults to undefined (API-only), which is
+   * what every test in this repo uses; real single-process deployments
+   * set this via the STATIC_DIR environment variable (see main.ts).
+   */
+  staticDir?: string;
 }
 
 /**
@@ -145,6 +187,8 @@ export function createApp(options: CreateAppOptions = {}) {
   const authResolver = options.authResolver ?? new SessionTokenAuthResolver(authService);
   const logger = options.logger ?? new NullLogger();
   const metricsCollector = options.metricsCollector ?? new InMemoryMetricsCollector();
+  const rateLimiter = options.rateLimiter ?? new RequestRateLimiter(new SystemClock());
+  const tryServeStatic = options.staticDir ? createStaticFileHandler(options.staticDir) : null;
   const startedAt = Date.now();
   const router = buildRouter(authService, metricsCollector, startedAt);
 
@@ -156,6 +200,10 @@ export function createApp(options: CreateAppOptions = {}) {
 
     const url = new URL(req.url ?? "/", "http://localhost");
     const method = (req.method ?? "GET").toUpperCase() as HttpMethod;
+
+    if (tryServeStatic && (await tryServeStatic(req, res, url.pathname))) {
+      return;
+    }
 
     // Finalizes the response, then records the observability side
     // effects (metrics + structured log) exactly once per request,
@@ -177,6 +225,12 @@ export function createApp(options: CreateAppOptions = {}) {
     };
 
     try {
+      // Global per-IP rate limit, checked before routing so even an
+      // unmatched/unauthenticated path counts against the budget —
+      // see RequestRateLimiter's doc comment.
+      const clientIp = req.socket.remoteAddress ?? "unknown";
+      rateLimiter.assertNotExceeded(clientIp);
+
       const { route, params } = router.match(method, url.pathname);
 
       const body = await readJsonBody(req);

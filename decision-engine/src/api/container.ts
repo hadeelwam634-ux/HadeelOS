@@ -4,47 +4,31 @@ import { DecisionApplicationService } from "../application/DecisionApplicationSe
 import { TodayDecisionApplicationService, TodayDecisionResult } from "../application/TodayDecisionApplicationService";
 import { SignalIngestionService } from "../application/SignalIngestionService";
 import { DecisionLifecycleService } from "../application/DecisionLifecycleService";
-import { InMemorySignalStoreRepository } from "../persistence/InMemorySignalStoreRepository";
-import { InMemoryEventLogRepository } from "../persistence/InMemoryEventLogRepository";
-import { InMemoryDigitalTwinRepository } from "../twin/InMemoryDigitalTwinRepository";
 import { DigitalTwinService } from "../twin/DigitalTwinService";
-import { InMemoryMemoryRepository } from "../memory/InMemoryMemoryRepository";
 import { MemoryMapService } from "../memory/MemoryMapService";
 import { MemoryGovernanceService } from "../memory/MemoryGovernanceService";
-import { InMemoryKnowledgeGraphRepository } from "../knowledge-graph/InMemoryKnowledgeGraphRepository";
 import { KnowledgeGraphService } from "../knowledge-graph/KnowledgeGraphService";
-import { InMemoryHypothesisRepository } from "../learning/InMemoryHypothesisRepository";
 import { HypothesisService } from "../learning/HypothesisService";
-import {
-  CalendarSignalService,
-  CalendarProvider,
-  InMemoryCalendarConnectionRepository,
-  FakeCalendarProvider,
-} from "../calendar";
-import {
-  GmailSignalService,
-  GmailProvider,
-  InMemoryGmailConnectionRepository,
-  FakeGmailProvider,
-} from "../gmail";
+import { CalendarSignalService, CalendarProvider, FakeCalendarProvider } from "../calendar";
+import { GmailSignalService, GmailProvider, FakeGmailProvider } from "../gmail";
+import { StorageBackend, InMemoryStorageBackend, defaultStorageBackend } from "../persistence/postgres/StorageBackend";
+import { GoogleTokenExchanger, defaultGoogleOAuthExchanger } from "../security/googleOAuth";
 
 /**
  * Everything one authenticated user's requests are allowed to touch.
  * Every repository instance here is created fresh per userId and never
  * shared across users — this is what "every request bound to userId;
- * no state sharing between users" (PR #9's non-negotiable rule) means
- * in an in-memory, single-process API layer: isolation by construction
- * rather than by a runtime userId filter on shared storage. Because of
- * this, a request for a decisionId/memoryId that belongs to a
- * *different* user's container simply cannot be found — it structurally
- * 404s rather than needing an explicit cross-tenant ownership check
- * (see ForbiddenError's doc comment in errors.ts).
+ * no state sharing between users" (PR #9's non-negotiable rule) means:
+ * isolation by construction rather than by a runtime userId filter on
+ * shared storage.
  *
- * PR #11 (PostgreSQL Adapter) replaces the InMemory* repositories
- * constructed here with Postgres-backed ones scoped by a `user_id`
- * column instead of by container instance — AppContainer's public
- * shape (the services it exposes) does not need to change for that
- * swap, only this file's construction of each repository.
+ * MVP Hardening: the repositories themselves now come from an injected
+ * StorageBackend (see persistence/postgres/StorageBackend.ts) instead
+ * of being hardcoded to InMemory* classes. PostgresStorageBackend scopes
+ * every query by the same userId this file constructs it with, so a
+ * request for a decisionId/memoryId that belongs to a *different*
+ * user's container still structurally 404s — isolation now holds at the
+ * database layer too, not just by container-instance construction.
  */
 export interface UserServices {
   readonly userId: UUID;
@@ -64,8 +48,8 @@ export interface UserServices {
    * The most recent TodayDecisionResult produced by POST
    * /api/today/recalculate for this user, so GET /api/today has
    * something to return without re-running the whole pipeline. This is
-   * an in-memory cache only — like every other piece of state in this
-   * container, it does not survive a process restart until PR #11.
+   * an in-memory cache only regardless of storage backend — recomputed
+   * on demand, never itself persisted.
    */
   lastToday: TodayDecisionResult | null;
 }
@@ -76,15 +60,18 @@ function buildUserServices(
   clock: Clock,
   calendarProvider: CalendarProvider,
   gmailProvider: GmailProvider,
+  storageBackend: StorageBackend,
 ): UserServices {
-  const signalStoreRepository = new InMemorySignalStoreRepository();
-  const eventLogRepository = new InMemoryEventLogRepository();
-  const digitalTwinRepository = new InMemoryDigitalTwinRepository();
-  const memoryRepository = new InMemoryMemoryRepository();
-  const knowledgeGraphRepository = new InMemoryKnowledgeGraphRepository();
-  const hypothesisRepository = new InMemoryHypothesisRepository();
-  const calendarConnectionRepository = new InMemoryCalendarConnectionRepository();
-  const gmailConnectionRepository = new InMemoryGmailConnectionRepository();
+  const {
+    signalStoreRepository,
+    eventLogRepository,
+    digitalTwinRepository,
+    memoryRepository,
+    knowledgeGraphRepository,
+    hypothesisRepository,
+    calendarConnectionRepository,
+    gmailConnectionRepository,
+  } = storageBackend.buildUserRepositories(userId);
 
   const digitalTwinService = new DigitalTwinService(digitalTwinRepository, idGenerator, clock);
   const memoryMapService = new MemoryMapService(memoryRepository);
@@ -168,7 +155,36 @@ export class AppContainer {
      * built from real OAuth client credentials.
      */
     private readonly gmailProvider: GmailProvider = new FakeGmailProvider(),
+    /**
+     * Where every per-user repository actually lives. Defaults to
+     * defaultStorageBackend(): Postgres if DATABASE_URL is set (the
+     * production default), otherwise InMemoryStorageBackend (tests and
+     * local dev only — see that function's doc comment). Tests that
+     * want an explicitly isolated in-memory container regardless of
+     * environment should pass `new InMemoryStorageBackend()` here.
+     */
+    private readonly storageBackend: StorageBackend = defaultStorageBackend(),
+    /**
+     * Server-side Google authorization-code exchanger shared across
+     * every user (holds no per-user state — only client_id/client_secret
+     * and a fetch function). Defaults to real Google OAuth if
+     * GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET are set, otherwise a Fake
+     * exchanger for local dev/tests — see defaultGoogleOAuthExchanger()'s
+     * doc comment. Used by /api/calendar/oauth/exchange and
+     * /api/gmail/oauth/exchange (see routes/calendar.ts, routes/gmail.ts)
+     * so the refresh token never has to transit through the browser.
+     */
+    readonly googleOAuthExchanger: GoogleTokenExchanger = defaultGoogleOAuthExchanger(),
   ) {}
+
+  /** Postgres-backed deployments must call this once before serving traffic. */
+  async ensureReady(): Promise<void> {
+    await this.storageBackend.ensureReady();
+  }
+
+  get storageMode() {
+    return this.storageBackend.mode;
+  }
 
   forUser(userId: UUID): UserServices {
     let services = this.perUser.get(userId);
@@ -179,9 +195,12 @@ export class AppContainer {
         this.clockFactory(),
         this.calendarProvider,
         this.gmailProvider,
+        this.storageBackend,
       );
       this.perUser.set(userId, services);
     }
     return services;
   }
 }
+
+export { InMemoryStorageBackend };
