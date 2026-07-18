@@ -6,3 +6,4 @@ export * from "./CalendarProvider";
 export * from "./GoogleCalendarProvider";
 export * from "./FakeCalendarProvider";
 export * from "./CalendarSignalService";
+export * from "./PostgresCalendarConnectionRepository";
