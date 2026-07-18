@@ -1,4 +1,4 @@
-import { spawn, ChildProcess } from "node:child_process";
+import { spawn, execSync, ChildProcess } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -63,8 +63,43 @@ export async function spawnBackend(): Promise<ChildProcess> {
 }
 
 export async function killBackend(child: ChildProcess): Promise<void> {
+  // If the process has already exited — e.g. it's the ORIGINAL handle
+  // from global-setup.ts, and full-journey.spec.ts's "backend restart"
+  // test already SIGTERM'd it and spawned a replacement — its "exit"
+  // event already fired once and will never fire again. Awaiting a
+  // fresh listener for it here would hang forever: this is exactly
+  // what made the E2E job in CI run 37+ minutes past all 5 tests
+  // passing, never completing, until manually cancelled. Guard against
+  // that by checking exitCode/signalCode (both non-null only once the
+  // process has actually exited) before waiting on anything.
+  if (child.exitCode !== null || child.signalCode !== null) {
+    return;
+  }
   await new Promise<void>((resolve) => {
     child.once("exit", () => resolve());
     child.kill("SIGTERM");
   });
+}
+
+/**
+ * Kills whatever process is currently bound to BACKEND_PORT, regardless
+ * of which ChildProcess handle spawned it. Used by global-setup.ts's
+ * teardown instead of killBackend(originalHandle): after
+ * full-journey.spec.ts's mid-suite restart, the process actually
+ * serving BACKEND_PORT is a different OS process than the one
+ * global-setup.ts originally spawned, and no in-process handle to it
+ * is available across the setup/worker process boundary (they
+ * communicate only via the ENV_FILE, same as DATABASE_URL/tokenKey
+ * above). Finding-by-port is the same technique the restart step
+ * itself already uses, and works correctly whether or not a restart
+ * ever happened.
+ */
+export function killBackendOnPort(): void {
+  try {
+    const pid = execSync(`lsof -t -i:${BACKEND_PORT}`).toString().trim().split("\n")[0];
+    if (pid) process.kill(Number(pid), "SIGTERM");
+  } catch {
+    // lsof unavailable or nothing bound - already stopped, or never
+    // started; nothing to do.
+  }
 }

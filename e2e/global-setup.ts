@@ -49,8 +49,19 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
   }
 
   return async () => {
-    const { killBackend } = await import("./backend-control");
-    await killBackend(backend);
+    // Deliberately NOT killBackend(backend): `backend` here is the
+    // handle to the process THIS function originally spawned, but
+    // tests/full-journey.spec.ts's restart step may have since SIGTERM'd
+    // it and spawned a replacement OS process to prove session/data
+    // survival across a real restart. Awaiting killBackend(backend) in
+    // that case hangs forever — its "exit" event already fired once for
+    // the original process and won't fire again — which is exactly what
+    // left the E2E job running 37+ minutes past all 5 tests passing.
+    // killBackendOnPort() finds whichever process is actually bound to
+    // BACKEND_PORT right now and kills that one, correctly handling
+    // both the restarted-and-not-restarted cases.
+    const { killBackendOnPort } = await import("./backend-control");
+    killBackendOnPort();
     await pg.stop();
   };
 }
