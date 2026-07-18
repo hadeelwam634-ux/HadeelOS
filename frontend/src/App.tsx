@@ -119,8 +119,13 @@ function I18nGate({ children }: { children: React.ReactNode }) {
           (see e2e/tests/full-journey.spec.ts) flagged the pre-login
           screen for missing one — the authenticated Shell already had
           <main id="main-content"> below, but this wrapper (used only
-          for AuthScreen) rendered children directly into the shell div. */}
-      <main id="main-content">{children}</main>
+          for AuthScreen) rendered children directly into the shell div.
+          Deliberately a DIFFERENT id ("auth-main", not "main-content"):
+          the E2E suite uses `main#main-content h1` as its signal that
+          real authentication succeeded (vs. still being on the auth
+          screen) — reusing the same id here would make that selector
+          match the pre-login screen too and silently defeat the check. */}
+      <main id="auth-main">{children}</main>
     </div>
   );
 }
