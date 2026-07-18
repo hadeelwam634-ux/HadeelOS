@@ -14,3 +14,4 @@ export * from "./calendar";
 export * from "./gmail";
 export * from "./observability";
 export * from "./api";
+export * from "./security";
