@@ -1,6 +1,6 @@
 import { requireAuth } from "../auth";
 import { Route } from "../router";
-import { connectGmailBodySchema } from "../schemas";
+import { connectGmailBodySchema, exchangeGmailOAuthBodySchema } from "../schemas";
 import { toPublicGmailConnection } from "../../gmail";
 
 /**
@@ -52,6 +52,38 @@ export const disconnectGmailRoute: Route = {
     const services = container.forUser(auth.userId);
     await services.gmailSignalService.disconnect(auth.userId);
     return { status: 200, body: { disconnected: true } };
+  },
+};
+
+/**
+ * MVP Hardening: the recommended production connect path — same
+ * server-to-server authorization-code exchange as
+ * exchangeCalendarOAuthCodeRoute (see calendar.ts and
+ * security/googleOAuth.ts). connectGmailRoute above is kept for local
+ * dev/tests/FakeGmailProvider flows only.
+ */
+export const exchangeGmailOAuthCodeRoute: Route = {
+  method: "POST",
+  pattern: "/api/gmail/oauth/exchange",
+  handler: async (ctx, container) => {
+    const auth = requireAuth(ctx.authContext);
+    const body = exchangeGmailOAuthBodySchema.parse(ctx.body);
+    const tokens = await container.googleOAuthExchanger.exchangeAuthorizationCode(
+      body.code,
+      body.redirectUri,
+    );
+    const services = container.forUser(auth.userId);
+    await services.gmailSignalService.connect({
+      userId: auth.userId,
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      expiresAt: tokens.expiresAt,
+    });
+    const connection = await services.gmailSignalService.getConnection(auth.userId);
+    return {
+      status: 200,
+      body: { connection: connection === null ? null : toPublicGmailConnection(connection) },
+    };
   },
 };
 

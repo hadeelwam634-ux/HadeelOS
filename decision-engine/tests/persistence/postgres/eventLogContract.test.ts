@@ -6,7 +6,7 @@ import {
 } from "../../../src/persistence/EventLogRepository";
 import { InMemoryEventLogRepository } from "../../../src/persistence/InMemoryEventLogRepository";
 import { PostgresEventLogRepository } from "../../../src/persistence/postgres/PostgresEventLogRepository";
-import { createPgMemDb } from "./pgMemHarness";
+import { createPgMemDb, DEFAULT_TEST_USER_ID } from "./pgMemHarness";
 
 function makeEntry(overrides: Partial<EventLogEntry> = {}): EventLogEntry {
   return {
@@ -88,4 +88,4 @@ function eventLogContract(name: string, makeRepo: () => EventLogRepository) {
 }
 
 eventLogContract("InMemoryEventLogRepository", () => new InMemoryEventLogRepository());
-eventLogContract("PostgresEventLogRepository (pg-mem)", () => new PostgresEventLogRepository(createPgMemDb()));
+eventLogContract("PostgresEventLogRepository (pg-mem)", () => new PostgresEventLogRepository(createPgMemDb(), DEFAULT_TEST_USER_ID));

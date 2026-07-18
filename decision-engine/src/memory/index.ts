@@ -5,3 +5,4 @@ export * from "./MemoryRepository";
 export * from "./InMemoryMemoryRepository";
 export * from "./MemoryMapService";
 export * from "./MemoryGovernanceService";
+export * from "./PostgresMemoryRepository";

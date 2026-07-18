@@ -9,3 +9,4 @@ export * from "./ExperimentService";
 export * from "./ExperimentPolicy";
 export * from "./EvidenceEvaluator";
 export * from "./errors";
+export * from "./PostgresHypothesisRepository";

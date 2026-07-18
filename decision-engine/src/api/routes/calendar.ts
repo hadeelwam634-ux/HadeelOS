@@ -1,6 +1,6 @@
 import { requireAuth } from "../auth";
 import { Route } from "../router";
-import { connectCalendarBodySchema } from "../schemas";
+import { connectCalendarBodySchema, exchangeCalendarOAuthBodySchema } from "../schemas";
 import { toPublicCalendarConnection } from "../../calendar";
 
 /**
@@ -53,6 +53,43 @@ export const disconnectCalendarRoute: Route = {
     const services = container.forUser(auth.userId);
     await services.calendarSignalService.disconnect(auth.userId);
     return { status: 200, body: { disconnected: true } };
+  },
+};
+
+/**
+ * MVP Hardening: the recommended production connect path. The frontend
+ * hands over only the short-lived, single-use authorization `code`
+ * Google's OAuth redirect gives it — the actual access/refresh token
+ * exchange happens server-to-server via container.googleOAuthExchanger
+ * (see security/googleOAuth.ts), so the refresh token (the most
+ * sensitive, longest-lived credential) never transits through the
+ * browser or our API request body at all, unlike connectCalendarRoute
+ * above (kept for local dev/tests/FakeCalendarProvider flows — see
+ * README "OAuth Token Exchange").
+ */
+export const exchangeCalendarOAuthCodeRoute: Route = {
+  method: "POST",
+  pattern: "/api/calendar/oauth/exchange",
+  handler: async (ctx, container) => {
+    const auth = requireAuth(ctx.authContext);
+    const body = exchangeCalendarOAuthBodySchema.parse(ctx.body);
+    const tokens = await container.googleOAuthExchanger.exchangeAuthorizationCode(
+      body.code,
+      body.redirectUri,
+    );
+    const services = container.forUser(auth.userId);
+    await services.calendarSignalService.connect({
+      userId: auth.userId,
+      calendarId: body.calendarId,
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      expiresAt: tokens.expiresAt,
+    });
+    const connection = await services.calendarSignalService.getConnection(auth.userId);
+    return {
+      status: 200,
+      body: { connection: connection === null ? null : toPublicCalendarConnection(connection) },
+    };
   },
 };
 
