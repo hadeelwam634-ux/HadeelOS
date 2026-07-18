@@ -115,7 +115,12 @@ function I18nGate({ children }: { children: React.ReactNode }) {
         <span className="app-name">HadeelOS</span>
         <LanguageToggle />
       </header>
-      {children}
+      {/* Explicit <main> landmark: axe-core's E2E accessibility scan
+          (see e2e/tests/full-journey.spec.ts) flagged the pre-login
+          screen for missing one — the authenticated Shell already had
+          <main id="main-content"> below, but this wrapper (used only
+          for AuthScreen) rendered children directly into the shell div. */}
+      <main id="main-content">{children}</main>
     </div>
   );
 }
