@@ -14,7 +14,13 @@ export default defineConfig({
     trace: "retain-on-failure",
   },
   webServer: {
-    command: `npm run dev -- --port ${FRONTEND_PORT} --strictPort`,
+    // --host 127.0.0.1 is required, not cosmetic: Vite's default "localhost"
+    // bind can resolve to the IPv6 loopback (::1) depending on the host's
+    // DNS/Node config, while FRONTEND_URL above (see ./ports.ts) polls
+    // 127.0.0.1 explicitly. Without a matching explicit bind, Vite comes up
+    // fine but Playwright's readiness poll never connects, and the
+    // webServer wait times out even though the dev server is healthy.
+    command: `npm run dev -- --host 127.0.0.1 --port ${FRONTEND_PORT} --strictPort`,
     cwd: "../frontend",
     url: FRONTEND_URL,
     reuseExistingServer: false,
