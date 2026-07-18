@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page, type BrowserContext } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { spawnBackend, killBackend } from "../backend-control";
 import type { ChildProcess } from "node:child_process";
@@ -22,21 +22,53 @@ import type { ChildProcess } from "node:child_process";
  * Also runs an axe-core accessibility scan against both the pre-login
  * screen and the authenticated Today Cockpit screen (MVP Hardening
  * requirement #9 — "basic accessibility check on the main screens").
+ *
+ * IMPORTANT: this suite deliberately shares ONE browser context/page
+ * across every test below (created in beforeAll, closed in afterAll)
+ * instead of using Playwright's default per-test `page` fixture.
+ * Playwright's built-in fixture hands each test a brand-new,
+ * storage-isolated context — even inside test.describe.serial, which
+ * only guarantees ordering and stop-on-first-failure, not shared
+ * storage. Since the session token lives in localStorage (see
+ * App.tsx's persistToken), a fresh context per test would silently
+ * wipe it between tests, and every test after the first would 401
+ * against a logged-out session while looking, from the assertions
+ * alone, like an authentication regression instead of a fixture
+ * artifact.
  */
 test.describe.serial("HadeelOS full user journey (MVP Hardening E2E)", () => {
   const email = `e2e-${Date.now()}@example.test`;
   const password = "Sup3rSecret!42";
 
-  test("registration renders an accessible auth screen and creates a session", async ({ page }) => {
+  let context: BrowserContext;
+  let page: Page;
+
+  test.beforeAll(async ({ browser }) => {
+    context = await browser.newContext();
+    page = await context.newPage();
+  });
+
+  test.afterAll(async () => {
+    await context.close();
+  });
+
+  test("registration renders an accessible auth screen and creates a session", async () => {
     await page.goto("/");
     await expect(page.getByRole("heading", { name: "HadeelOS" })).toBeVisible();
 
     const a11y = await new AxeBuilder({ page }).analyze();
     expect(a11y.violations, JSON.stringify(a11y.violations, null, 2)).toEqual([]);
 
-    // Default language is Arabic (RTL) — flip to the switch-to-register
-    // control regardless of language by relying on the <label for>
-    // wiring (id-based) rather than translated text.
+    // AuthScreen defaults to "login" mode (see AuthScreen.tsx's
+    // useState<"login" | "register">("login")) — this is a brand-new
+    // email that has never been registered, so we must switch to
+    // "register" mode first or the submit below 401s against a
+    // nonexistent account and the screen never advances. Select by
+    // class (`.link-button` is the only such control in the form)
+    // rather than translated text, since default language is Arabic
+    // (RTL).
+    await page.locator("form.auth-form button.link-button").click();
+
     await page.locator("#auth-email").fill(email);
     await page.locator("#auth-password").fill(password);
     await page.locator("form.auth-form button[type=submit]").click();
@@ -50,10 +82,10 @@ test.describe.serial("HadeelOS full user journey (MVP Hardening E2E)", () => {
     expect(token).toBeTruthy();
   });
 
-  test("Today Cockpit loads for the authenticated user", async ({ page }) => {
+  test("Today Cockpit loads for the authenticated user", async () => {
     await page.goto("/");
-    // Already authenticated from the previous test (same storage state
-    // within this worker/browser context) — should land directly on
+    // Already authenticated from the previous test (same shared
+    // context/page — see beforeAll above) — should land directly on
     // the cockpit, not the auth screen.
     await expect(page.locator(".top-bar")).toBeVisible();
     await expect(page.locator("main#main-content h1")).toBeVisible();
@@ -62,7 +94,7 @@ test.describe.serial("HadeelOS full user journey (MVP Hardening E2E)", () => {
     expect(a11y.violations, JSON.stringify(a11y.violations, null, 2)).toEqual([]);
   });
 
-  test("connects Calendar and Gmail via the mock provider", async ({ page }) => {
+  test("connects Calendar and Gmail via the mock provider", async () => {
     await page.goto("/");
     const rows = page.locator(".connector-row");
     await expect(rows).toHaveCount(2);
@@ -78,7 +110,7 @@ test.describe.serial("HadeelOS full user journey (MVP Hardening E2E)", () => {
     await expect(gmailRow.getByRole("button")).toHaveText(/disconnect|فصل/i, { timeout: 10_000 });
   });
 
-  test("session and connections survive a real backend restart", async ({ page }) => {
+  test("session and connections survive a real backend restart", async () => {
     await page.goto("/");
     // Confirm pre-restart state: both connectors show "connected", not
     // "connect" — i.e. this reload already round-tripped through the
@@ -135,7 +167,7 @@ test.describe.serial("HadeelOS full user journey (MVP Hardening E2E)", () => {
     void backend;
   });
 
-  test("logout clears the session and returns to the auth screen", async ({ page }) => {
+  test("logout clears the session and returns to the auth screen", async () => {
     await page.goto("/");
     await expect(page.locator(".top-bar")).toBeVisible();
 
