@@ -1,4 +1,4 @@
-import { SignalStore, SignalStoreEntry, SignalType } from "../../types";
+import { SignalStore, SignalStoreEntry, SignalType, UUID } from "../../types";
 import { SignalStoreRepository } from "../SignalStoreRepository";
 import { Queryable } from "./Queryable";
 
@@ -12,9 +12,10 @@ interface SignalStoreRow {
   sync_consistency_days: string | number;
 }
 
-function toParams(entry: SignalStoreEntry) {
+function toParams(userId: UUID, entry: SignalStoreEntry) {
   const isNumber = typeof entry.latestValue === "number";
   return [
+    userId,
     entry.signalType,
     isNumber ? (entry.latestValue as number) : null,
     isNumber ? null : (entry.latestValue as string),
@@ -39,29 +40,37 @@ function fromRow(row: SignalStoreRow): SignalStoreEntry {
 }
 
 /**
- * Postgres-backed implementation of SignalStoreRepository. Every row read
- * from the database is turned into a brand-new object by fromRow(), so
- * (unlike the in-memory implementation) there is no shared-reference risk
- * to defend against — a fresh SELECT can never alias a previously
- * returned object.
+ * Postgres-backed implementation of SignalStoreRepository, scoped to a
+ * single userId bound at construction time (mirroring how the in-memory
+ * implementation achieves isolation via a fresh Map per AppContainer
+ * user — see container.ts's class doc comment). Every query filters by
+ * this bound user_id, so a single shared `signal_store` table can never
+ * leak one user's signals into another user's reads.
+ *
+ * Every row read from the database is turned into a brand-new object by
+ * fromRow(), so (unlike the in-memory implementation) there is no
+ * shared-reference risk to defend against.
  */
 export class PostgresSignalStoreRepository implements SignalStoreRepository {
-  constructor(private readonly db: Queryable) {}
+  constructor(
+    private readonly db: Queryable,
+    private readonly userId: UUID,
+  ) {}
 
   async upsert(entry: SignalStoreEntry): Promise<void> {
     await this.db.query(
       `INSERT INTO signal_store
-         (signal_type, latest_value_number, latest_value_text, latest_value_kind,
+         (user_id, signal_type, latest_value_number, latest_value_text, latest_value_kind,
           latest_timestamp, reliability_score, sync_consistency_days)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
-       ON CONFLICT (signal_type) DO UPDATE SET
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       ON CONFLICT (user_id, signal_type) DO UPDATE SET
          latest_value_number = EXCLUDED.latest_value_number,
          latest_value_text = EXCLUDED.latest_value_text,
          latest_value_kind = EXCLUDED.latest_value_kind,
          latest_timestamp = EXCLUDED.latest_timestamp,
          reliability_score = EXCLUDED.reliability_score,
          sync_consistency_days = EXCLUDED.sync_consistency_days`,
-      toParams(entry),
+      toParams(this.userId, entry),
     );
   }
 
@@ -77,16 +86,16 @@ export class PostgresSignalStoreRepository implements SignalStoreRepository {
 
   async get(signalType: SignalType): Promise<SignalStoreEntry | undefined> {
     const res = await this.db.query<SignalStoreRow>(
-      `SELECT * FROM signal_store WHERE signal_type = $1`,
-      [signalType],
+      `SELECT * FROM signal_store WHERE user_id = $1 AND signal_type = $2`,
+      [this.userId, signalType],
     );
     return res.rows[0] ? fromRow(res.rows[0]) : undefined;
   }
 
   async getAll(): Promise<SignalStore> {
     const res = await this.db.query<SignalStoreRow>(
-      `SELECT * FROM signal_store`,
-      [],
+      `SELECT * FROM signal_store WHERE user_id = $1`,
+      [this.userId],
     );
     const result: SignalStore = {};
     for (const row of res.rows) {
@@ -97,7 +106,8 @@ export class PostgresSignalStoreRepository implements SignalStoreRepository {
   }
 
   async delete(signalType: SignalType): Promise<void> {
-    await this.db.query(`DELETE FROM signal_store WHERE signal_type = $1`, [
+    await this.db.query(`DELETE FROM signal_store WHERE user_id = $1 AND signal_type = $2`, [
+      this.userId,
       signalType,
     ]);
   }
