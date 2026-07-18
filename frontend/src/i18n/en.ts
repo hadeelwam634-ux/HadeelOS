@@ -88,6 +88,28 @@ const en: TranslationShape = {
   language: {
     toggle: "العربية",
   },
+  auth: {
+    title: "HadeelOS",
+    subtitle: "Sign in or create an account to continue",
+    emailLabel: "Email",
+    passwordLabel: "Password",
+    loginButton: "Log in",
+    registerButton: "Create account",
+    switchToRegister: "Don't have an account? Create one",
+    switchToLogin: "Already have an account? Log in",
+    submitting: "Working…",
+    logout: "Log out",
+  },
+  connectors: {
+    heading: "Connected sources",
+    calendarLabel: "Google Calendar",
+    gmailLabel: "Gmail",
+    connect: "Connect (mock)",
+    disconnect: "Disconnect",
+    connected: "Connected",
+    notConnected: "Not connected",
+    connecting: "Connecting…",
+  },
   errors: {
     generic: "Something went wrong. Please try again.",
     unauthenticated: "Please sign in.",

@@ -87,6 +87,28 @@ const ar = {
   language: {
     toggle: "English",
   },
+  auth: {
+    title: "HadeelOS",
+    subtitle: "سجّلي الدخول أو أنشئي حسابًا للمتابعة",
+    emailLabel: "البريد الإلكتروني",
+    passwordLabel: "كلمة المرور",
+    loginButton: "تسجيل الدخول",
+    registerButton: "إنشاء حساب",
+    switchToRegister: "ليس لديك حساب؟ أنشئي واحدًا",
+    switchToLogin: "لديك حساب بالفعل؟ سجّلي الدخول",
+    submitting: "جارٍ التنفيذ…",
+    logout: "تسجيل الخروج",
+  },
+  connectors: {
+    heading: "الربط بالمصادر",
+    calendarLabel: "تقويم Google",
+    gmailLabel: "بريد Gmail",
+    connect: "ربط (تجريبي)",
+    disconnect: "فصل",
+    connected: "متصل",
+    notConnected: "غير متصل",
+    connecting: "جارٍ الربط…",
+  },
   errors: {
     generic: "حدث خطأ ما. حاولي مرة أخرى.",
     unauthenticated: "الرجاء تسجيل الدخول.",
