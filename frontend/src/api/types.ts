@@ -113,3 +113,35 @@ export interface ApiErrorBody {
     issues?: Array<{ path: string; message: string }>;
   };
 }
+
+// ---------- Auth (MVP Hardening: frontend wired to real sessions) ----------
+
+export interface PublicUser {
+  id: string;
+  email: string;
+  createdAt: string;
+}
+
+export interface RegisterResult {
+  user: PublicUser;
+  token: string;
+}
+
+export interface LoginResult {
+  token: string;
+}
+
+// ---------- Calendar / Gmail connections ----------
+
+export interface PublicCalendarConnection {
+  userId: string;
+  calendarId: string;
+  expiresAt: string;
+  connectedAt: string;
+}
+
+export interface PublicGmailConnection {
+  userId: string;
+  expiresAt: string;
+  connectedAt: string;
+}

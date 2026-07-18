@@ -7,3 +7,5 @@ export * from "./InMemorySessionRepository";
 export * from "./passwordHashing";
 export * from "./LoginRateLimiter";
 export * from "./AuthService";
+export * from "./PostgresUserRepository";
+export * from "./PostgresSessionRepository";

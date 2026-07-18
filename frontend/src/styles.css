@@ -225,3 +225,77 @@ button {
     scroll-behavior: auto !important;
   }
 }
+
+/* ---------- Auth screen (MVP Hardening) ---------- */
+
+.auth-screen {
+  min-height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+}
+
+.auth-form {
+  width: 100%;
+  max-width: 360px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.auth-form label {
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin-top: 0.4rem;
+}
+
+.auth-form input {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  padding: 0.55rem 0.7rem;
+  font-size: 1rem;
+}
+
+.auth-form button[type="submit"] {
+  margin-top: 0.5rem;
+  background: var(--accent);
+  border: none;
+  border-radius: 8px;
+  color: #0b0f14;
+  font-weight: 600;
+  padding: 0.6rem;
+}
+
+.auth-error {
+  color: var(--danger);
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+.link-button {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 0.85rem;
+  padding: 0.25rem 0;
+  text-decoration: underline;
+}
+
+.logout-button {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.4rem 0.9rem;
+}
+
+/* ---------- Connectors panel (MVP Hardening) ---------- */
+
+.connector-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}

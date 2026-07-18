@@ -1,0 +1,45 @@
+name: E2E CI
+
+on:
+  pull_request:
+    paths:
+      - "decision-engine/**"
+      - "frontend/**"
+      - "e2e/**"
+      - ".github/workflows/e2e-ci.yml"
+  push:
+    branches: [main]
+    paths:
+      - "decision-engine/**"
+      - "frontend/**"
+      - "e2e/**"
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install decision-engine dependencies
+        working-directory: decision-engine
+        run: npm ci
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install e2e dependencies
+        working-directory: e2e
+        run: npm ci
+
+      - name: Install Playwright browsers
+        working-directory: e2e
+        run: npx playwright install --with-deps chromium
+
+      - name: Run E2E suite
+        working-directory: e2e
+        run: npm test
