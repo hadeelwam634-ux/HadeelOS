@@ -27,11 +27,6 @@ export function loadMigrationSql(filename: string): string {
   return readFileSync(MIGRATIONS_DIR + filename, "utf-8");
 }
 
-/** @deprecated use loadMigrationSql("001_init.sql") — kept for backward compatibility. */
-export function loadInitMigrationSql(): string {
-  return loadMigrationSql("001_init.sql");
-}
-
 /**
  * Applies every file in MIGRATION_FILES, in order, against the given
  * connection. Every statement in every migration file is idempotent
