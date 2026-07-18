@@ -9,8 +9,7 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "start": "tsx src/main.ts",
-    "build": "tsc",
-    "test:e2e": "playwright test"
+    "build": "tsc"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",

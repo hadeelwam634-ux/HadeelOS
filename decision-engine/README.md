@@ -183,6 +183,7 @@ The final pass before real personal use, requested after `release/mvp-rc1`'s rev
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Real Google OAuth code exchange (`/api/calendar/oauth/exchange`, `/api/gmail/oauth/exchange`) | From a Google Cloud OAuth 2.0 Client. Without both set, the server falls back to a fake exchanger and logs a warning — the mock-provider connect routes (`/api/calendar/connect`, `/api/gmail/connect`) still work without these. |
 | `PORT` | `src/main.ts` | Defaults to `3000`. |
 | `DATABASE_SSL` | Postgres connections requiring TLS (most managed Postgres hosts) | Set to `"true"` to enable `{ rejectUnauthorized: false }` on the pool's SSL config. |
+| `STATIC_DIR` | Single-process deployment (see `docs/DEPLOYMENT.md`) | Absolute path to the frontend's built `dist/` directory. When set, `main.ts` serves the built frontend and its SPA fallback alongside the API from the same process/port (see `staticFiles.ts`). Omit for local development, where the frontend runs on its own Vite dev server instead. |
 
 ### Migrations & Rollback
 
