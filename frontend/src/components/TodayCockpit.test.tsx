@@ -15,7 +15,7 @@ describe("TodayCockpit", () => {
     const data = makeTodayResult();
     vi.spyOn(ApiClient.prototype, "getToday").mockResolvedValue(data);
 
-    const client = new ApiClient({ userId: "u1" });
+    const client = new ApiClient({ token: "test-token" });
     renderWithI18n(<TodayCockpit client={client} />);
 
     expect(await screen.findByText(data.decision!.proposedAction)).toBeInTheDocument();
@@ -27,7 +27,7 @@ describe("TodayCockpit", () => {
     vi.spyOn(ApiClient.prototype, "getToday").mockResolvedValue(
       makeTodayResult({ decision: null, uncertainty: { isUncertain: true, reason: "no_candidates" } })
     );
-    const client = new ApiClient({ userId: "u1" });
+    const client = new ApiClient({ token: "test-token" });
     renderWithI18n(<TodayCockpit client={client} />);
 
     expect(await screen.findByText("لا توجد قرارات مرشّحة اليوم بعد.")).toBeInTheDocument();
@@ -37,7 +37,7 @@ describe("TodayCockpit", () => {
     vi.spyOn(ApiClient.prototype, "getToday").mockResolvedValue(
       makeTodayResult({ decision: null, uncertainty: { isUncertain: true, reason: "missing_signals" } })
     );
-    const client = new ApiClient({ userId: "u1" });
+    const client = new ApiClient({ token: "test-token" });
     renderWithI18n(<TodayCockpit client={client} />);
 
     expect(await screen.findByText("لا تتوفر إشارات كافية بعد لاتخاذ قرار واثق.")).toBeInTheDocument();
@@ -47,7 +47,7 @@ describe("TodayCockpit", () => {
     vi.spyOn(ApiClient.prototype, "getToday").mockResolvedValue(
       makeTodayResult({ uncertainty: { isUncertain: true, reason: "near_tie", margin: 0.01 } })
     );
-    const client = new ApiClient({ userId: "u1" });
+    const client = new ApiClient({ token: "test-token" });
     renderWithI18n(<TodayCockpit client={client} />);
 
     expect(await screen.findByText("النتائج متقاربة جدًا — لا يوجد خيار واضح بعد.")).toBeInTheDocument();
@@ -57,7 +57,7 @@ describe("TodayCockpit", () => {
     vi.spyOn(ApiClient.prototype, "getToday").mockResolvedValue(
       makeTodayResult({ confidence: { score: 0.1, qualifier: "low", contributors: [] } })
     );
-    const client = new ApiClient({ userId: "u1" });
+    const client = new ApiClient({ token: "test-token" });
     renderWithI18n(<TodayCockpit client={client} />);
 
     expect(await screen.findByText("الثقة بهذا القرار منخفضة حاليًا.")).toBeInTheDocument();
@@ -68,7 +68,7 @@ describe("TodayCockpit", () => {
       .spyOn(ApiClient.prototype, "getToday")
       .mockRejectedValueOnce(new Error("boom"))
       .mockResolvedValueOnce(makeTodayResult());
-    const client = new ApiClient({ userId: "u1" });
+    const client = new ApiClient({ token: "test-token" });
     renderWithI18n(<TodayCockpit client={client} />);
 
     expect(await screen.findByText("حدث خطأ غير متوقع أثناء تحميل قرار اليوم.")).toBeInTheDocument();
@@ -85,7 +85,7 @@ describe("TodayCockpit", () => {
       .spyOn(ApiClient.prototype, "respondToDecision")
       .mockResolvedValue({ entry: {} as never });
 
-    const client = new ApiClient({ userId: "u1" });
+    const client = new ApiClient({ token: "test-token" });
     renderWithI18n(<TodayCockpit client={client} />);
 
     const acceptButton = await screen.findByRole("button", { name: "قبول" });

@@ -24,7 +24,7 @@ const memoryRecord = {
 describe("MemoryPanel", () => {
   it("renders memories from the live API, not hard-coded data", async () => {
     vi.spyOn(ApiClient.prototype, "getMemory").mockResolvedValue({ memories: [memoryRecord] });
-    const client = new ApiClient({ userId: "u1" });
+    const client = new ApiClient({ token: "test-token" });
     renderWithI18n(<MemoryPanel client={client} />);
 
     expect(await screen.findByText(/prayer_preference/)).toBeInTheDocument();
@@ -34,7 +34,7 @@ describe("MemoryPanel", () => {
     vi.spyOn(ApiClient.prototype, "getMemory").mockResolvedValue({ memories: [memoryRecord] });
     const forgetSpy = vi.spyOn(ApiClient.prototype, "forgetMemory").mockResolvedValue({ memory: memoryRecord });
 
-    const client = new ApiClient({ userId: "u1" });
+    const client = new ApiClient({ token: "test-token" });
     renderWithI18n(<MemoryPanel client={client} />);
 
     const forgetButton = await screen.findByRole("button", { name: "نسيان" });
