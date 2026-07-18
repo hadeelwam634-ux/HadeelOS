@@ -6,3 +6,4 @@ export * from "./GmailProvider";
 export * from "./GoogleGmailProvider";
 export * from "./FakeGmailProvider";
 export * from "./GmailSignalService";
+export * from "./PostgresGmailConnectionRepository";
