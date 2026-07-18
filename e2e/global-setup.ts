@@ -1,4 +1,3 @@
-import { ChildProcess } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import EmbeddedPostgresImport from "embedded-postgres";
 import { PG_PORT } from "./ports";
@@ -40,9 +39,8 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
   const tokenKey = randomBytes(32).toString("base64");
   writeBackendEnv({ connectionString, tokenKey });
 
-  let backend: ChildProcess;
   try {
-    backend = await spawnBackend();
+    await spawnBackend();
   } catch (err) {
     await pg.stop();
     throw err;
