@@ -1,6 +1,6 @@
 import { test, expect, type Page, type BrowserContext } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
-import { spawnBackend, killBackend } from "../backend-control";
+import { spawnBackend } from "../backend-control";
 import type { ChildProcess } from "node:child_process";
 
 /**
