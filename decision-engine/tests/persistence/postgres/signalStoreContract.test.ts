@@ -3,7 +3,7 @@ import { SignalStoreEntry } from "../../../src/types";
 import { SignalStoreRepository } from "../../../src/persistence/SignalStoreRepository";
 import { InMemorySignalStoreRepository } from "../../../src/persistence/InMemorySignalStoreRepository";
 import { PostgresSignalStoreRepository } from "../../../src/persistence/postgres/PostgresSignalStoreRepository";
-import { createPgMemDb } from "./pgMemHarness";
+import { createPgMemDb, DEFAULT_TEST_USER_ID } from "./pgMemHarness";
 
 /**
  * A single behavioral contract, run against both the in-memory and the
@@ -95,4 +95,4 @@ function signalStoreContract(
 }
 
 signalStoreContract("InMemorySignalStoreRepository", () => new InMemorySignalStoreRepository());
-signalStoreContract("PostgresSignalStoreRepository (pg-mem)", () => new PostgresSignalStoreRepository(createPgMemDb()));
+signalStoreContract("PostgresSignalStoreRepository (pg-mem)", () => new PostgresSignalStoreRepository(createPgMemDb(), DEFAULT_TEST_USER_ID));
