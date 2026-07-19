@@ -3,6 +3,7 @@ import { CircuitBreaker, withRetry, RetryOptions } from "../observability";
 import { CalendarProviderError } from "./errors";
 import type { CalendarProvider } from "./CalendarProvider";
 import type { CalendarConnection, CalendarEvent } from "./types";
+import { FakeCalendarProvider } from "./FakeCalendarProvider";
 
 interface GoogleEventsResponse {
   items?: Array<{
@@ -166,4 +167,37 @@ export class GoogleCalendarProvider implements CalendarProvider {
       isAllDay,
     };
   }
+}
+
+/**
+ * PostgreSQL-style default-selection (same pattern as
+ * defaultGoogleOAuthExchanger() in security/googleOAuth.ts and
+ * defaultStorageBackend() in persistence/postgres/StorageBackend.ts):
+ * if GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are both set, real
+ * Google Calendar access is used; otherwise this falls back to
+ * FakeCalendarProvider (always zero events) and logs a loud warning.
+ *
+ * Real-account wiring gap this closes: GoogleCalendarProvider above
+ * has existed since PR #13 and is fully implemented, but main.ts
+ * previously constructed `new AppContainer()` with no calendarProvider
+ * argument at all, so AppContainer's own FakeCalendarProvider default
+ * was always used in production regardless of GOOGLE_CLIENT_ID/SECRET
+ * — real Google Calendar sync was unreachable even when the OAuth
+ * token exchange itself (security/googleOAuth.ts) was fully wired.
+ * See main.ts for where this is actually plugged in.
+ */
+export function defaultCalendarProvider(): CalendarProvider {
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+  if (!clientId || !clientSecret) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      "[HadeelOS] GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET are not set — " +
+        "falling back to FakeCalendarProvider. Calendar sync will always " +
+        "report zero events. Set both environment variables to enable real " +
+        "Google Calendar sync.",
+    );
+    return new FakeCalendarProvider();
+  }
+  return new GoogleCalendarProvider(clientId, clientSecret);
 }
