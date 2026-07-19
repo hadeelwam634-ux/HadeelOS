@@ -35,3 +35,26 @@ export function createMetricsRoute(metricsCollector: MetricsCollector): Route {
     handler: async () => ({ status: 200, body: metricsCollector.snapshot() }),
   };
 }
+
+/**
+ * Public, read-only client configuration. Exposes only the Google
+ * OAuth client_id (never a secret — client_id is meant to be public;
+ * it just identifies this app to Google's consent screen, the same
+ * value that appears in the browser's address bar during the OAuth
+ * redirect) so the frontend can build a real "Connect Google account"
+ * flow without needing its own copy of GOOGLE_CLIENT_ID baked in at
+ * frontend build time. null when Google OAuth isn't configured, so
+ * the frontend can hide the real-connect button and fall back to the
+ * mock connector only (see ConnectorsPanel.tsx).
+ */
+export function createClientConfigRoute(): Route {
+  return {
+    method: "GET",
+    pattern: "/api/system/config",
+    public: true,
+    handler: async () => ({
+      status: 200,
+      body: { googleClientId: process.env.GOOGLE_CLIENT_ID ?? null },
+    }),
+  };
+}
