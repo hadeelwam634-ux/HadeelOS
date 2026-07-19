@@ -22,11 +22,19 @@
 import { createHttpApiServer } from "./api/server";
 import { AppContainer } from "./api/container";
 import { ConsoleLogger } from "./observability";
+import { defaultCalendarProvider } from "./calendar";
+import { defaultGmailProvider } from "./gmail";
 
 async function main(): Promise<void> {
   const port = Number(process.env.PORT ?? 3000);
   const logger = new ConsoleLogger();
-  const container = new AppContainer();
+  // Real-account wiring (see defaultCalendarProvider()/defaultGmailProvider()'s
+  // doc comments): without these explicit arguments, AppContainer's own
+  // constructor defaults (FakeCalendarProvider/FakeGmailProvider) would
+  // always be used here, and GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET would
+  // silently have no effect on Calendar/Gmail sync even though the OAuth
+  // token exchange itself (security/googleOAuth.ts) already honors them.
+  const container = new AppContainer(undefined, undefined, defaultCalendarProvider(), defaultGmailProvider());
 
   logger.log("info", "startup", { storageMode: container.storageMode, port });
 
