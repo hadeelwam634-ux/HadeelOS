@@ -4,7 +4,7 @@ import { AppContainer } from "./container";
 import { AuthResolver, SessionTokenAuthResolver } from "./auth";
 import { HttpMethod, RequestContext, Router } from "./router";
 import { InvalidJsonBodyError, mapErrorToHttpResponse } from "./errors";
-import { createHealthRoute, createMetricsRoute } from "./routes/system";
+import { createHealthRoute, createMetricsRoute, createClientConfigRoute } from "./routes/system";
 import { createAuthRoutes } from "./routes/auth";
 import { getCurrentSignalsRoute, postSignalsRoute } from "./routes/signals";
 import { getTodayRoute, recalculateTodayRoute } from "./routes/today";
@@ -52,6 +52,7 @@ function buildRouter(authService: AuthService, metricsCollector: MetricsCollecto
   for (const route of [
     createHealthRoute(startedAt),
     createMetricsRoute(metricsCollector),
+    createClientConfigRoute(),
     ...createAuthRoutes(authService),
     postSignalsRoute,
     getCurrentSignalsRoute,
