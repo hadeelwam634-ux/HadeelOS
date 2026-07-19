@@ -3,6 +3,7 @@ import { CircuitBreaker, withRetry, RetryOptions } from "../observability";
 import { GmailProviderError } from "./errors";
 import type { GmailProvider } from "./GmailProvider";
 import type { GmailConnection } from "./types";
+import { FakeGmailProvider } from "./FakeGmailProvider";
 
 interface GmailListResponse {
   resultSizeEstimate?: number;
@@ -132,4 +133,28 @@ export class GoogleGmailProvider implements GmailProvider {
     const expiresAt = new Date(Date.now() + payload.expires_in * 1000).toISOString();
     return { accessToken: payload.access_token, expiresAt };
   }
+}
+
+/**
+ * Same default-selection pattern as defaultCalendarProvider() in
+ * calendar/GoogleCalendarProvider.ts — see that function's doc comment
+ * for the wiring gap this closes (main.ts previously never passed a
+ * calendarProvider/gmailProvider to AppContainer at all, so its own
+ * FakeGmailProvider default was always used regardless of
+ * GOOGLE_CLIENT_ID/SECRET).
+ */
+export function defaultGmailProvider(): GmailProvider {
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+  if (!clientId || !clientSecret) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      "[HadeelOS] GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET are not set — " +
+        "falling back to FakeGmailProvider. Gmail sync will always report " +
+        "zero unread messages. Set both environment variables to enable " +
+        "real Gmail sync.",
+    );
+    return new FakeGmailProvider();
+  }
+  return new GoogleGmailProvider(clientId, clientSecret);
 }
